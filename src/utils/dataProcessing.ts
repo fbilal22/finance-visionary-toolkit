@@ -1,4 +1,3 @@
-
 export interface FinancialDataPoint {
   date: string;
   open?: number;
@@ -55,9 +54,17 @@ export const determineColumnTypes = (
       return;
     }
     
-    // Check if it's a date column
-    const datePattern = /^\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{1,2}[-/]\d{1,2}[-/]\d{2}$/;
-    if (sampleValues.every(val => datePattern.test(val))) {
+    // Enhanced date pattern detection
+    // This regex will match common date formats like:
+    // YYYY-MM-DD, MM/DD/YYYY, DD-MM-YYYY, etc.
+    const datePattern = /^\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}$|^\d{1,2}[-/\.]\d{1,2}[-/\.]\d{4}$|^\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2}$/;
+    const potentialDateColumn = header.toLowerCase().includes('date') || 
+                               header.toLowerCase().includes('time') ||
+                               header.toLowerCase() === 'day' ||
+                               header.toLowerCase() === 'month' ||
+                               header.toLowerCase() === 'year';
+    
+    if (potentialDateColumn || sampleValues.some(val => datePattern.test(val))) {
       types[header] = 'date';
       return;
     }
@@ -90,16 +97,51 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   
   const columnTypes = determineColumnTypes(parsedData, headers);
   
+  // Find the date column
+  let dateColumnIndex = headers.findIndex(
+    header => columnTypes[header] === 'date' || 
+              header.toLowerCase().includes('date') || 
+              header.toLowerCase().includes('time')
+  );
+  
+  // If no date column found, use the first column as fallback if it makes sense
+  if (dateColumnIndex === -1) {
+    // Check if first column could be a date (even if we didn't detect it earlier)
+    const firstColSample = dataRows.slice(0, 5).map(row => row[0]);
+    const couldBeDate = firstColSample.some(val => {
+      // Try to parse as date
+      const maybeDate = new Date(val);
+      return !isNaN(maybeDate.getTime());
+    });
+    
+    if (couldBeDate) {
+      dateColumnIndex = 0;
+      columnTypes[headers[0]] = 'date';
+      console.log('First column detected as potential date:', headers[0]);
+    }
+  }
+  
+  console.log('Date column index:', dateColumnIndex, 'Column name:', headers[dateColumnIndex]);
+  
   // Convert to proper data types
   const structuredData: FinancialDataPoint[] = dataRows.map(row => {
     const dataPoint: FinancialDataPoint = { date: '' };
     
+    // First, set the date field if a date column was found
+    if (dateColumnIndex !== -1 && row[dateColumnIndex]) {
+      dataPoint.date = row[dateColumnIndex];
+    } else {
+      // Fallback date (current date) if no date column found
+      dataPoint.date = new Date().toISOString().split('T')[0];
+    }
+    
+    // Then, set all other fields
     headers.forEach((header, index) => {
+      if (index === dateColumnIndex) return; // Skip date column as we already processed it
+      
       const value = row[index];
       
-      if (columnTypes[header] === 'date') {
-        dataPoint.date = value;
-      } else if (columnTypes[header] === 'numeric') {
+      if (columnTypes[header] === 'numeric') {
         dataPoint[header] = value ? parseFloat(value) : undefined;
       } else {
         dataPoint[header] = value;
