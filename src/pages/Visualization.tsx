@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { LineChart, BarChart, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Area, ResponsiveContainer, Scatter, ScatterChart, Cell } from 'recharts';
-import { AlertCircle, TrendingUp, BarChart3, CandlestickChart, ScatterChart } from 'lucide-react';
+import { AlertCircle, TrendingUp, BarChart3, CandlestickChart, ScatterChart2 } from 'lucide-react';
 
 const Visualization = () => {
   const { dataset, isLoading } = useData();
@@ -18,23 +19,28 @@ const Visualization = () => {
   const [yAxis, setYAxis] = useState('');
   const [additionalSeries, setAdditionalSeries] = useState<string[]>([]);
 
+  // Redirect if no data
   useMemo(() => {
     if (!isLoading && !dataset) {
       navigate('/');
     }
   }, [dataset, isLoading, navigate]);
 
+  // Initialize default axes when dataset loads
   useMemo(() => {
     if (dataset) {
       const { columnNames, columnTypes } = dataset.meta;
       
+      // Set date column as default X-axis if available
       const dateColumn = columnNames.find(col => columnTypes[col] === 'date');
       if (dateColumn) setXAxis(dateColumn);
       
+      // Set first numeric column as default Y-axis
       const numericColumns = columnNames.filter(col => columnTypes[col] === 'numeric');
       if (numericColumns.length > 0) {
         setYAxis(numericColumns[0]);
         
+        // Set second and third numeric columns as additional series if available
         if (numericColumns.length > 1) {
           setAdditionalSeries([numericColumns[1]]);
           if (numericColumns.length > 2) {
@@ -65,17 +71,22 @@ const Visualization = () => {
   const { data, meta } = dataset;
   const { columnNames, columnTypes } = meta;
   
+  // Filter numeric columns for Y-axis
   const numericColumns = columnNames.filter(col => columnTypes[col] === 'numeric');
   
+  // Check if we have OHLC data for candlestick
   const hasOHLCData = numericColumns.includes('open') && 
                        numericColumns.includes('high') && 
                        numericColumns.includes('low') && 
                        numericColumns.includes('close');
 
+  // Generate chart data (limit to 100 points for performance)
   const chartData = data.slice(-100);
   
+  // Generate a palette of colors based on finance theme
   const colors = ['#1E88E5', '#4CAF50', '#E53935', '#FFB300', '#8E24AA', '#607D8B'];
 
+  // Create a formatter for the tooltip values
   const formatValue = (value: number) => {
     return value.toLocaleString(undefined, {
       minimumFractionDigits: 2,
@@ -266,6 +277,7 @@ const Visualization = () => {
                 formatter={(value: number) => [formatValue(value), '']}
               />
               <Legend />
+              {/* High-Low line */}
               {chartData.map((entry, index) => (
                 <Line
                   key={`hl-${index}`}
@@ -293,6 +305,7 @@ const Visualization = () => {
                   })}
                 </Line>
               ))}
+              {/* Candle bodies */}
               {chartData.map((entry, index) => {
                 const fill = entry.close >= entry.open ? colors[1] : colors[2];
                 return (
@@ -358,7 +371,7 @@ const Visualization = () => {
                   size="sm"
                   onClick={() => setChartType('scatter')}
                 >
-                  <ScatterChart size={16} className="mr-1" />
+                  <ScatterChart2 size={16} className="mr-1" />
                   Scatter
                 </Button>
                 <Button 
