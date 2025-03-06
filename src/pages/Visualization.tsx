@@ -8,8 +8,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LineChart, BarChart, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Area, ResponsiveContainer, Scatter, ScatterChart, Cell } from 'recharts';
-import { AlertCircle, TrendingUp, BarChart3, CandlestickChart, ScatterChart2 } from 'lucide-react';
+import { LineChart, BarChart, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Area, ResponsiveContainer, Scatter, ScatterChart as RechartsScatterChart, Cell } from 'recharts';
+import { AlertCircle, TrendingUp, BarChart3, CandlestickChart, ScatterChart } from 'lucide-react';
 
 const Visualization = () => {
   const { dataset, isLoading } = useData();
@@ -225,7 +225,7 @@ const Visualization = () => {
       case 'scatter':
         return (
           <ResponsiveContainer width="100%" height={400}>
-            <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+            <RechartsScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
               <XAxis 
                 type="number" 
@@ -245,7 +245,7 @@ const Visualization = () => {
                 data={chartData}
                 fill={colors[0]}
               />
-            </ScatterChart>
+            </RechartsScatterChart>
           </ResponsiveContainer>
         );
         
@@ -347,7 +347,7 @@ const Visualization = () => {
                   size="sm"
                   onClick={() => setChartType('line')}
                 >
-                  <TrendingUp size={16} className="mr-1" />
+                  <TrendingUp className="h-4 w-4 mr-1" />
                   Line
                 </Button>
                 <Button 
@@ -355,7 +355,7 @@ const Visualization = () => {
                   size="sm"
                   onClick={() => setChartType('bar')}
                 >
-                  <BarChart3 size={16} className="mr-1" />
+                  <BarChart3 className="h-4 w-4 mr-1" />
                   Bar
                 </Button>
                 <Button 
@@ -363,7 +363,7 @@ const Visualization = () => {
                   size="sm"
                   onClick={() => setChartType('area')}
                 >
-                  <TrendingUp size={16} className="mr-1" />
+                  <TrendingUp className="h-4 w-4 mr-1" />
                   Area
                 </Button>
                 <Button 
@@ -371,7 +371,7 @@ const Visualization = () => {
                   size="sm"
                   onClick={() => setChartType('scatter')}
                 >
-                  <ScatterChart2 size={16} className="mr-1" />
+                  <ScatterChart className="h-4 w-4 mr-1" />
                   Scatter
                 </Button>
                 <Button 
@@ -379,7 +379,7 @@ const Visualization = () => {
                   size="sm"
                   onClick={() => setChartType('candlestick')}
                 >
-                  <CandlestickChart size={16} className="mr-1" />
+                  <CandlestickChart className="h-4 w-4 mr-1" />
                   Candlestick
                 </Button>
               </div>
