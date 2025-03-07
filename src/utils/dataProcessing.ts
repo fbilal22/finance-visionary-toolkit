@@ -28,12 +28,44 @@ export interface ProcessedDataset {
   fileName: string;
 }
 
-// Parse CSV data
+// Parse CSV data with support for quoted values
 export const parseCSV = (csvText: string): string[][] => {
   const lines = csvText.split('\n');
-  return lines.map(line => 
-    line.split(',').map(value => value.trim())
-  ).filter(line => line.length > 1 && line.some(cell => cell !== ''));
+  const result: string[][] = [];
+  
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    
+    const row: string[] = [];
+    let inQuotes = false;
+    let currentValue = '';
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"' && (i === 0 || line[i-1] !== '\\')) {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        // End of cell
+        row.push(currentValue.replace(/^"|"$/g, '').trim());
+        currentValue = '';
+      } else {
+        currentValue += char;
+      }
+    }
+    
+    // Add the last cell
+    if (currentValue) {
+      row.push(currentValue.replace(/^"|"$/g, '').trim());
+    }
+    
+    if (row.length > 0) {
+      result.push(row);
+    }
+  }
+  
+  console.log("Parsed CSV data:", result.slice(0, 2));
+  return result;
 };
 
 // Determine column types
@@ -55,24 +87,35 @@ export const determineColumnTypes = (
     }
     
     // Enhanced date pattern detection
-    // This regex will match common date formats like:
-    // YYYY-MM-DD, MM/DD/YYYY, DD-MM-YYYY, etc.
-    const datePattern = /^\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}$|^\d{1,2}[-/\.]\d{1,2}[-/\.]\d{4}$|^\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2}$/;
+    const datePatterns = [
+      /^\d{1,2}\/\d{1,2}\/\d{4}$/,  // MM/DD/YYYY or DD/MM/YYYY
+      /^\d{4}-\d{1,2}-\d{1,2}$/,    // YYYY-MM-DD
+      /^\d{1,2}-\d{1,2}-\d{4}$/,    // DD-MM-YYYY or MM-DD-YYYY
+      /^\d{1,2}\.\d{1,2}\.\d{4}$/   // DD.MM.YYYY or MM.DD.YYYY
+    ];
+    
     const potentialDateColumn = header.toLowerCase().includes('date') || 
-                               header.toLowerCase().includes('time') ||
                                header.toLowerCase() === 'day' ||
                                header.toLowerCase() === 'month' ||
                                header.toLowerCase() === 'year';
     
-    if (potentialDateColumn || sampleValues.some(val => datePattern.test(val))) {
+    const isDateColumn = potentialDateColumn || 
+                        sampleValues.some(val => datePatterns.some(pattern => pattern.test(val)));
+    
+    if (isDateColumn) {
       types[header] = 'date';
+      console.log(`Detected date column: ${header}`);
       return;
     }
     
-    // Check if it's a numeric column
-    const numericPattern = /^-?\d+(\.\d+)?$/;
-    if (sampleValues.every(val => numericPattern.test(val))) {
+    // Check if it's a numeric column (may include % or currency symbols)
+    const cleanNumericPattern = /^-?[\d,.]+%?$/;
+    if (sampleValues.every(val => {
+      const cleanVal = val.replace(/[^\d.-]/g, ''); // Remove currency symbols, commas, etc.
+      return cleanNumericPattern.test(val) || /^-?\d+(\.\d+)?$/.test(cleanVal);
+    })) {
       types[header] = 'numeric';
+      console.log(`Detected numeric column: ${header}`);
       return;
     }
     
@@ -80,71 +123,121 @@ export const determineColumnTypes = (
     const uniqueValues = new Set(sampleValues);
     if (uniqueValues.size <= Math.max(5, sampleValues.length * 0.3)) {
       types[header] = 'categorical';
+      console.log(`Detected categorical column: ${header}`);
       return;
     }
     
     types[header] = 'unknown';
   });
   
+  console.log("Determined column types:", types);
   return types;
+};
+
+// Normalize volume values like "11.43M" to actual numbers
+const normalizeVolume = (volume: string): number => {
+  if (!volume) return 0;
+  
+  // Remove commas from numbers like "123,456"
+  volume = volume.replace(/,/g, '');
+  
+  // Handle suffixes like M (million), K (thousand), B (billion)
+  const suffixMatch = volume.match(/^([\d.]+)([KMB])$/i);
+  if (suffixMatch) {
+    const number = parseFloat(suffixMatch[1]);
+    const suffix = suffixMatch[2].toUpperCase();
+    
+    if (suffix === 'K') return number * 1000;
+    if (suffix === 'M') return number * 1000000;
+    if (suffix === 'B') return number * 1000000000;
+  }
+  
+  return parseFloat(volume);
+};
+
+// Clean percentage values by removing % sign and converting to decimal
+const cleanPercentage = (value: string): number => {
+  if (!value) return 0;
+  return parseFloat(value.replace('%', '')) / 100;
 };
 
 // Convert raw CSV data to structured dataset
 export const processCSVData = (csvText: string, fileName: string): ProcessedDataset => {
   const parsedData = parseCSV(csvText);
+  if (parsedData.length < 2) {
+    throw new Error("CSV file is empty or could not be parsed correctly");
+  }
+  
   const headers = parsedData[0];
   const dataRows = parsedData.slice(1);
+  
+  console.log("Headers:", headers);
+  console.log("Sample data row:", dataRows[0]);
   
   const columnTypes = determineColumnTypes(parsedData, headers);
   
   // Find the date column
   let dateColumnIndex = headers.findIndex(
     header => columnTypes[header] === 'date' || 
-              header.toLowerCase().includes('date') || 
-              header.toLowerCase().includes('time')
+              header.toLowerCase().includes('date')
   );
   
-  // If no date column found, use the first column as fallback if it makes sense
-  if (dateColumnIndex === -1) {
-    // Check if first column could be a date (even if we didn't detect it earlier)
-    const firstColSample = dataRows.slice(0, 5).map(row => row[0]);
-    const couldBeDate = firstColSample.some(val => {
-      // Try to parse as date
-      const maybeDate = new Date(val);
-      return !isNaN(maybeDate.getTime());
-    });
-    
-    if (couldBeDate) {
-      dateColumnIndex = 0;
-      columnTypes[headers[0]] = 'date';
-      console.log('First column detected as potential date:', headers[0]);
-    }
-  }
-  
   console.log('Date column index:', dateColumnIndex, 'Column name:', headers[dateColumnIndex]);
+  
+  // Map column names to standard financial data fields
+  const columnMapping: Record<string, string> = {};
+  headers.forEach(header => {
+    const lowerHeader = header.toLowerCase();
+    
+    if (lowerHeader === 'date' || lowerHeader.includes('date')) {
+      columnMapping[header] = 'date';
+    } else if (lowerHeader === 'price' || lowerHeader === 'close') {
+      columnMapping[header] = 'close';
+    } else if (lowerHeader === 'open') {
+      columnMapping[header] = 'open';
+    } else if (lowerHeader === 'high') {
+      columnMapping[header] = 'high';
+    } else if (lowerHeader === 'low') {
+      columnMapping[header] = 'low';
+    } else if (lowerHeader === 'vol.' || lowerHeader === 'volume') {
+      columnMapping[header] = 'volume';
+    } else if (lowerHeader.includes('change') || lowerHeader.includes('%')) {
+      columnMapping[header] = 'change';
+    } else {
+      // Keep original name for other columns
+      columnMapping[header] = header;
+    }
+  });
+  
+  console.log("Column mapping:", columnMapping);
   
   // Convert to proper data types
   const structuredData: FinancialDataPoint[] = dataRows.map(row => {
     const dataPoint: FinancialDataPoint = { date: '' };
     
-    // First, set the date field if a date column was found
-    if (dateColumnIndex !== -1 && row[dateColumnIndex]) {
-      dataPoint.date = row[dateColumnIndex];
-    } else {
-      // Fallback date (current date) if no date column found
-      dataPoint.date = new Date().toISOString().split('T')[0];
-    }
-    
-    // Then, set all other fields
+    // Process each column
     headers.forEach((header, index) => {
-      if (index === dateColumnIndex) return; // Skip date column as we already processed it
-      
       const value = row[index];
+      const mappedField = columnMapping[header];
       
-      if (columnTypes[header] === 'numeric') {
-        dataPoint[header] = value ? parseFloat(value) : undefined;
+      if (mappedField === 'date' && value) {
+        // Convert MM/DD/YYYY to YYYY-MM-DD format
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
+          const [month, day, year] = value.split('/');
+          dataPoint.date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        } else {
+          dataPoint.date = value;
+        }
+      } else if (mappedField === 'volume' && value) {
+        dataPoint[mappedField] = normalizeVolume(value);
+      } else if (mappedField === 'change' && value) {
+        dataPoint[mappedField] = cleanPercentage(value);
+      } else if (columnTypes[header] === 'numeric' && value) {
+        // Remove any non-numeric characters except decimal point
+        const cleanValue = value.replace(/[^\d.-]/g, '');
+        dataPoint[mappedField] = parseFloat(cleanValue);
       } else {
-        dataPoint[header] = value;
+        dataPoint[mappedField] = value;
       }
     });
     
@@ -198,7 +291,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   return {
     data: structuredData,
     meta: {
-      columnNames: headers,
+      columnNames: headers.map(header => columnMapping[header]),
       columnTypes,
       rowCount: structuredData.length,
       missingValues,

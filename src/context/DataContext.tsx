@@ -20,12 +20,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const loadDataset = async (file: File) => {
     try {
       setIsLoading(true);
+      console.log("Loading file:", file.name);
       const text = await file.text();
       
       // Import the processing function dynamically to reduce initial load time
       const { processCSVData } = await import('@/utils/dataProcessing');
       
       const processed = processCSVData(text, file.name);
+      console.log("Processed data:", {
+        rowCount: processed.data.length,
+        columnNames: processed.meta.columnNames,
+        firstRow: processed.data[0]
+      });
+      
       setDataset(processed);
       
       toast({
@@ -36,7 +43,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       console.error("Error loading data:", error);
       toast({
         title: "Error Loading Data",
-        description: "The file couldn't be processed. Please check the format.",
+        description: error instanceof Error ? error.message : "The file couldn't be processed. Please check the format.",
         variant: "destructive",
       });
     } finally {
