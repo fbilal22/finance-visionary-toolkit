@@ -131,15 +131,17 @@ const Visualization = () => {
                 activeDot={{ r: 5 }}
               />
               {additionalSeries.map((series, index) => (
-                <Line
-                  key={series}
-                  type="monotone"
-                  dataKey={series}
-                  stroke={colors[(index + 1) % colors.length]}
-                  strokeWidth={2}
-                  dot={{ r: 1 }}
-                  activeDot={{ r: 5 }}
-                />
+                series && (
+                  <Line
+                    key={series}
+                    type="monotone"
+                    dataKey={series}
+                    stroke={colors[(index + 1) % colors.length]}
+                    strokeWidth={2}
+                    dot={{ r: 1 }}
+                    activeDot={{ r: 5 }}
+                  />
+                )
               ))}
             </LineChart>
           </ResponsiveContainer>
@@ -165,11 +167,13 @@ const Visualization = () => {
               <Legend />
               <Bar dataKey={yAxis} fill={colors[0]} />
               {additionalSeries.map((series, index) => (
-                <Bar
-                  key={series}
-                  dataKey={series}
-                  fill={colors[(index + 1) % colors.length]}
-                />
+                series && (
+                  <Bar
+                    key={series}
+                    dataKey={series}
+                    fill={colors[(index + 1) % colors.length]}
+                  />
+                )
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -180,7 +184,7 @@ const Visualization = () => {
           <ResponsiveContainer width="100%" height={400}>
             <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
               <defs>
-                {[yAxis, ...additionalSeries].map((key, index) => (
+                {[yAxis, ...additionalSeries.filter(Boolean)].map((key, index) => (
                   <linearGradient key={key} id={`color${index}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={colors[index % colors.length]} stopOpacity={0.8}/>
                     <stop offset="95%" stopColor={colors[index % colors.length]} stopOpacity={0.1}/>
@@ -209,14 +213,16 @@ const Visualization = () => {
                 fill={`url(#color0)`} 
               />
               {additionalSeries.map((series, index) => (
-                <Area
-                  key={series}
-                  type="monotone"
-                  dataKey={series}
-                  stroke={colors[(index + 1) % colors.length]}
-                  fillOpacity={1}
-                  fill={`url(#color${index + 1})`}
-                />
+                series && (
+                  <Area
+                    key={series}
+                    type="monotone"
+                    dataKey={series}
+                    stroke={colors[(index + 1) % colors.length]}
+                    fillOpacity={1}
+                    fill={`url(#color${index + 1})`}
+                  />
+                )
               ))}
             </ComposedChart>
           </ResponsiveContainer>
@@ -427,7 +433,8 @@ const Visualization = () => {
                     if (value) {
                       setAdditionalSeries([value, additionalSeries[1] || '']);
                     } else {
-                      setAdditionalSeries(['']);
+                      // Use 'none' as placeholder value
+                      setAdditionalSeries([]);
                     }
                   }}
                 >
@@ -435,7 +442,7 @@ const Visualization = () => {
                     <SelectValue placeholder="Add another series (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {numericColumns
                       .filter(col => col !== yAxis)
                       .map(col => (
