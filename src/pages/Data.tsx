@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,8 +16,8 @@ const Data = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('data');
 
-  // Redirect if no data
-  useMemo(() => {
+  // Replace useMemo with useEffect to avoid React Router warning
+  useEffect(() => {
     if (!isLoading && !dataset) {
       navigate('/');
     }
@@ -53,6 +53,17 @@ const Data = () => {
       case 'categorical': return 'bg-finance-yellow text-black';
       default: return 'bg-finance-gray text-white';
     }
+  };
+
+  // Fix: Get column types for original column names, not the mapped ones
+  const getColumnType = (column: string) => {
+    // Find original column name if it's been mapped
+    for (const [originalCol, mappedCol] of Object.entries(columnNames)) {
+      if (mappedCol === column) {
+        return columnTypes[originalCol] || 'unknown';
+      }
+    }
+    return columnTypes[column] || 'unknown';
   };
 
   return (
@@ -219,11 +230,11 @@ const Data = () => {
                       {Object.entries(summary).map(([column, stats]) => (
                         <TableRow key={column}>
                           <TableCell>{column}</TableCell>
-                          <TableCell>{stats.min?.toFixed(2)}</TableCell>
-                          <TableCell>{stats.max?.toFixed(2)}</TableCell>
-                          <TableCell>{stats.mean?.toFixed(2)}</TableCell>
-                          <TableCell>{stats.median?.toFixed(2)}</TableCell>
-                          <TableCell>{stats.stdDev?.toFixed(2)}</TableCell>
+                          <TableCell>{stats.min !== undefined ? stats.min.toFixed(2) : '—'}</TableCell>
+                          <TableCell>{stats.max !== undefined ? stats.max.toFixed(2) : '—'}</TableCell>
+                          <TableCell>{stats.mean !== undefined ? stats.mean.toFixed(2) : '—'}</TableCell>
+                          <TableCell>{stats.median !== undefined ? stats.median.toFixed(2) : '—'}</TableCell>
+                          <TableCell>{stats.stdDev !== undefined ? stats.stdDev.toFixed(2) : '—'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -259,8 +270,8 @@ const Data = () => {
                           {columnTypes[column]}
                         </Badge>
                       </TableCell>
-                      <TableCell>{missingValues[column]}</TableCell>
-                      <TableCell>{((missingValues[column] / rowCount) * 100).toFixed(2)}%</TableCell>
+                      <TableCell>{missingValues[column] || 0}</TableCell>
+                      <TableCell>{((missingValues[column] || 0) / rowCount * 100).toFixed(2)}%</TableCell>
                       <TableCell className="max-w-xs truncate">
                         {data.slice(0, 3).map((row, i) => (
                           <span key={i} className="mr-2">

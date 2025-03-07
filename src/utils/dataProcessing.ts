@@ -237,7 +237,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     // Process each column
     headers.forEach((header, index) => {
       const value = row[index];
-      if (value === undefined) return; // Skip undefined values
+      if (value === undefined || value === '') return; // Skip undefined or empty values
       
       const mappedField = columnMapping[header];
       
@@ -286,14 +286,29 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     stdDev?: number;
   }> = {};
   
-  headers.forEach(header => {
-    missingValues[header] = validData.filter(row => 
-      row[header] === undefined || row[header] === ''
-    ).length;
+  // Initialize missing values counters for all columns
+  columnNames = Object.values(columnMapping);
+  columnNames.forEach(mappedCol => {
+    missingValues[mappedCol] = 0;
+  });
+  
+  // Count missing values
+  validData.forEach(row => {
+    columnNames.forEach(column => {
+      if (row[column] === undefined || row[column] === '') {
+        missingValues[column] = (missingValues[column] || 0) + 1;
+      }
+    });
+  });
+  
+  // Generate summary statistics for numeric columns
+  columnNames.forEach(column => {
+    // Find the original column for type checking
+    const originalCol = Object.keys(columnMapping).find(key => columnMapping[key] === column);
     
-    if (columnTypes[header] === 'numeric') {
+    if (originalCol && columnTypes[originalCol] === 'numeric') {
       const values = validData
-        .map(row => row[header] as number)
+        .map(row => row[column] as number)
         .filter(val => val !== undefined && !isNaN(val)) as number[];
       
       if (values.length > 0) {
@@ -309,7 +324,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
         const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / values.length;
         const stdDev = Math.sqrt(variance);
         
-        summary[header] = {
+        summary[column] = {
           min: sorted[0],
           max: sorted[sorted.length - 1],
           mean,
@@ -322,14 +337,14 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   
   console.log("Processed data:", {
     rowCount: validData.length,
-    columnNames: Object.values(columnMapping),
+    columnNames: columnNames,
     firstRow: validData[0]
   });
   
   return {
     data: validData,
     meta: {
-      columnNames: headers.map(header => columnMapping[header]),
+      columnNames,
       columnTypes,
       rowCount: validData.length,
       missingValues,
