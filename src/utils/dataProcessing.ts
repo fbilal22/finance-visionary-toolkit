@@ -276,6 +276,9 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   // Filter out any rows with invalid date
   const validData = structuredData.filter(item => item.date && item.date !== '');
 
+  // Get the list of column names from the column mapping
+  const columnNames = Object.values(columnMapping);
+  
   // Analyze dataset for metadata
   const missingValues: Record<string, number> = {};
   const summary: Record<string, {
@@ -287,7 +290,6 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   }> = {};
   
   // Initialize missing values counters for all columns
-  columnNames = Object.values(columnMapping);
   columnNames.forEach(mappedCol => {
     missingValues[mappedCol] = 0;
   });
@@ -337,7 +339,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   
   console.log("Processed data:", {
     rowCount: validData.length,
-    columnNames: columnNames,
+    columnNames,
     firstRow: validData[0]
   });
   
