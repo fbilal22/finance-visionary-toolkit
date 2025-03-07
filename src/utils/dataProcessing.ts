@@ -1,3 +1,4 @@
+
 export interface FinancialDataPoint {
   date: string;
   open?: number;
@@ -28,9 +29,10 @@ export interface ProcessedDataset {
   fileName: string;
 }
 
-// Parse CSV data with support for quoted values
+// Parse CSV data with proper handling of quoted values
 export const parseCSV = (csvText: string): string[][] => {
-  const lines = csvText.split('\n');
+  // Split by lines, accounting for both \r\n and \n line endings
+  const lines = csvText.split(/\r?\n/);
   const result: string[][] = [];
   
   for (const line of lines) {
@@ -44,19 +46,23 @@ export const parseCSV = (csvText: string): string[][] => {
       const char = line[i];
       
       if (char === '"' && (i === 0 || line[i-1] !== '\\')) {
+        // Toggle quote state, but don't add the quote character
         inQuotes = !inQuotes;
       } else if (char === ',' && !inQuotes) {
-        // End of cell
-        row.push(currentValue.replace(/^"|"$/g, '').trim());
+        // End of cell - only if not inside quotes
+        row.push(currentValue.trim());
         currentValue = '';
       } else {
-        currentValue += char;
+        // Add character to current value, excluding quote characters
+        if (!(char === '"' && (i === 0 || i === line.length - 1 || line[i+1] === ','))) {
+          currentValue += char;
+        }
       }
     }
     
     // Add the last cell
-    if (currentValue) {
-      row.push(currentValue.replace(/^"|"$/g, '').trim());
+    if (currentValue || row.length > 0) {
+      row.push(currentValue.trim());
     }
     
     if (row.length > 0) {
@@ -64,7 +70,7 @@ export const parseCSV = (csvText: string): string[][] => {
     }
   }
   
-  console.log("Parsed CSV data:", result.slice(0, 2));
+  console.log("Parsed CSV data:", result.slice(0, 3));
   return result;
 };
 
@@ -108,12 +114,25 @@ export const determineColumnTypes = (
       return;
     }
     
-    // Check if it's a numeric column (may include % or currency symbols)
-    const cleanNumericPattern = /^-?[\d,.]+%?$/;
-    if (sampleValues.every(val => {
+    // Check if it's a numeric column (may include % or currency symbols or suffixes like M, K)
+    const isNumeric = sampleValues.every(val => {
+      // Check for percentage values like "0.72%"
+      if (val.endsWith('%')) {
+        const numPart = val.replace('%', '');
+        return !isNaN(parseFloat(numPart));
+      }
+      
+      // Check for volume values with suffixes like "11.43M"
+      if (/^[\d,.]+[KMB]$/i.test(val)) {
+        return true;
+      }
+      
+      // Check for regular numeric values
       const cleanVal = val.replace(/[^\d.-]/g, ''); // Remove currency symbols, commas, etc.
-      return cleanNumericPattern.test(val) || /^-?\d+(\.\d+)?$/.test(cleanVal);
-    })) {
+      return !isNaN(parseFloat(cleanVal));
+    });
+    
+    if (isNumeric) {
       types[header] = 'numeric';
       console.log(`Detected numeric column: ${header}`);
       return;
@@ -218,13 +237,20 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     // Process each column
     headers.forEach((header, index) => {
       const value = row[index];
+      if (value === undefined) return; // Skip undefined values
+      
       const mappedField = columnMapping[header];
       
       if (mappedField === 'date' && value) {
         // Convert MM/DD/YYYY to YYYY-MM-DD format
         if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
-          const [month, day, year] = value.split('/');
-          dataPoint.date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          const parts = value.split('/');
+          if (parts.length === 3) {
+            const [month, day, year] = parts;
+            dataPoint.date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          } else {
+            dataPoint.date = value;
+          }
         } else {
           dataPoint.date = value;
         }
@@ -233,9 +259,12 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
       } else if (mappedField === 'change' && value) {
         dataPoint[mappedField] = cleanPercentage(value);
       } else if (columnTypes[header] === 'numeric' && value) {
-        // Remove any non-numeric characters except decimal point
+        // Handle numeric values, removing any non-numeric characters except decimal point
         const cleanValue = value.replace(/[^\d.-]/g, '');
-        dataPoint[mappedField] = parseFloat(cleanValue);
+        const numValue = parseFloat(cleanValue);
+        if (!isNaN(numValue)) {
+          dataPoint[mappedField] = numValue;
+        }
       } else {
         dataPoint[mappedField] = value;
       }
@@ -243,6 +272,9 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     
     return dataPoint;
   });
+
+  // Filter out any rows with invalid date
+  const validData = structuredData.filter(item => item.date && item.date !== '');
 
   // Analyze dataset for metadata
   const missingValues: Record<string, number> = {};
@@ -255,14 +287,14 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   }> = {};
   
   headers.forEach(header => {
-    missingValues[header] = structuredData.filter(row => 
+    missingValues[header] = validData.filter(row => 
       row[header] === undefined || row[header] === ''
     ).length;
     
     if (columnTypes[header] === 'numeric') {
-      const values = structuredData
+      const values = validData
         .map(row => row[header] as number)
-        .filter(val => val !== undefined) as number[];
+        .filter(val => val !== undefined && !isNaN(val)) as number[];
       
       if (values.length > 0) {
         const sorted = [...values].sort((a, b) => a - b);
@@ -288,12 +320,18 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     }
   });
   
+  console.log("Processed data:", {
+    rowCount: validData.length,
+    columnNames: Object.values(columnMapping),
+    firstRow: validData[0]
+  });
+  
   return {
-    data: structuredData,
+    data: validData,
     meta: {
       columnNames: headers.map(header => columnMapping[header]),
       columnTypes,
-      rowCount: structuredData.length,
+      rowCount: validData.length,
       missingValues,
       summary
     },

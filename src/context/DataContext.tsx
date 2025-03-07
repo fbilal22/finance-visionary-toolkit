@@ -21,12 +21,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     try {
       setIsLoading(true);
       console.log("Loading file:", file.name);
+      
+      // Read the file content
       const text = await file.text();
       
       // Import the processing function dynamically to reduce initial load time
       const { processCSVData } = await import('@/utils/dataProcessing');
       
+      // Process the CSV data
       const processed = processCSVData(text, file.name);
+      
+      if (processed.data.length === 0) {
+        throw new Error("No valid data rows could be processed. Please check the file format.");
+      }
+      
       console.log("Processed data:", {
         rowCount: processed.data.length,
         columnNames: processed.meta.columnNames,
