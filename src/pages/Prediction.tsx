@@ -10,8 +10,36 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, LineChart, ArrowRight } from 'lucide-react';
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from '@/components/ui/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  linearRegressionModel,
+  movingAverageModel,
+  exponentialSmoothingModel,
+  doubleExponentialSmoothingModel,
+  arimaLikeModel,
+  seasonalNaiveModel,
+  meanReversionModel
+} from '@/utils/predictionModels';
 
-type PredictionMethod = 'linear' | 'movingAverage' | 'exponential';
+type PredictionMethod = 
+  | 'linear' 
+  | 'movingAverage' 
+  | 'exponential' 
+  | 'doubleExponential'
+  | 'arima'
+  | 'seasonal'
+  | 'meanReversion';
+
+const predictionMethods = [
+  { id: 'linear', name: 'Linear Regression', description: 'Fits a straight line to historical data.' },
+  { id: 'movingAverage', name: 'Moving Average', description: 'Uses the average of recent periods to predict future values.' },
+  { id: 'exponential', name: 'Exponential Smoothing', description: 'Weights recent observations more heavily than older ones.' },
+  { id: 'doubleExponential', name: 'Double Exponential', description: 'Handles data with trends using two smoothing equations.' },
+  { id: 'arima', name: 'ARIMA-like', description: 'Simplified version of Auto-Regressive Integrated Moving Average.' },
+  { id: 'seasonal', name: 'Seasonal Naive', description: 'Assumes future values follow seasonal patterns from the past.' },
+  { id: 'meanReversion', name: 'Mean Reversion', description: 'Assumes prices tend to return to their historical average.' },
+];
 
 const Prediction = () => {
   const { dataset, isLoading } = useData();
@@ -23,6 +51,8 @@ const Prediction = () => {
   const [predictionMethod, setPredictionMethod] = useState<PredictionMethod>('linear');
   const [predictions, setPredictions] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('chart');
+  const [modelComparison, setModelComparison] = useState<Record<string, any[]>>({});
 
   // Redirect if no data
   useEffect(() => {
@@ -38,101 +68,6 @@ const Prediction = () => {
       if (numericCols.length > 0) setTargetColumn(numericCols[0]);
     }
   }, [dataset, isLoading, navigate]);
-
-  // Linear regression prediction
-  const generateLinearPrediction = (data: any[], targetCol: string, daysToPredict: number) => {
-    // Extract x and y data points
-    const xValues = Array.from({ length: data.length }, (_, i) => i);
-    const yValues = data.map(item => item[targetCol]);
-    
-    // Calculate linear regression coefficients
-    const n = xValues.length;
-    const sumX = xValues.reduce((sum, x) => sum + x, 0);
-    const sumY = yValues.reduce((sum, y) => sum + y, 0);
-    const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
-    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
-    
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    
-    // Generate predictions
-    const predictions = [];
-    const lastDate = new Date(data[data.length - 1].date);
-    
-    for (let i = 1; i <= daysToPredict; i++) {
-      const nextX = xValues.length + i - 1;
-      const predictedValue = slope * nextX + intercept;
-      
-      const nextDate = new Date(lastDate);
-      nextDate.setDate(nextDate.getDate() + i);
-      
-      predictions.push({
-        date: nextDate.toISOString().split('T')[0],
-        [targetCol]: parseFloat(predictedValue.toFixed(2)),
-        isPrediction: true
-      });
-    }
-    
-    return predictions;
-  };
-
-  // Moving average prediction
-  const generateMovingAveragePrediction = (data: any[], targetCol: string, daysToPredict: number) => {
-    const windowSize = 5; // 5-day moving average
-    const values = data.map(item => item[targetCol]);
-    
-    // Calculate the moving average of the last window
-    const lastWindow = values.slice(-windowSize);
-    const movingAverage = lastWindow.reduce((sum, val) => sum + val, 0) / windowSize;
-    
-    // Generate predictions
-    const predictions = [];
-    const lastDate = new Date(data[data.length - 1].date);
-    
-    for (let i = 1; i <= daysToPredict; i++) {
-      const nextDate = new Date(lastDate);
-      nextDate.setDate(nextDate.getDate() + i);
-      
-      predictions.push({
-        date: nextDate.toISOString().split('T')[0],
-        [targetCol]: parseFloat(movingAverage.toFixed(2)),
-        isPrediction: true
-      });
-    }
-    
-    return predictions;
-  };
-
-  // Exponential smoothing prediction
-  const generateExponentialPrediction = (data: any[], targetCol: string, daysToPredict: number) => {
-    const alpha = 0.3; // Smoothing factor
-    const values = data.map(item => item[targetCol]);
-    
-    // Initialize with the first value
-    let forecast = values[0];
-    
-    // Calculate the exponential smoothing
-    for (let i = 1; i < values.length; i++) {
-      forecast = alpha * values[i] + (1 - alpha) * forecast;
-    }
-    
-    // Generate predictions
-    const predictions = [];
-    const lastDate = new Date(data[data.length - 1].date);
-    
-    for (let i = 1; i <= daysToPredict; i++) {
-      const nextDate = new Date(lastDate);
-      nextDate.setDate(nextDate.getDate() + i);
-      
-      predictions.push({
-        date: nextDate.toISOString().split('T')[0],
-        [targetCol]: parseFloat(forecast.toFixed(2)),
-        isPrediction: true
-      });
-    }
-    
-    return predictions;
-  };
 
   const generatePredictions = () => {
     if (!dataset || !targetColumn || !dateColumn) {
@@ -154,13 +89,25 @@ const Prediction = () => {
       
       switch (predictionMethod) {
         case 'linear':
-          predictedData = generateLinearPrediction(data, targetColumn, predictionDays);
+          predictedData = linearRegressionModel(data, targetColumn, predictionDays);
           break;
         case 'movingAverage':
-          predictedData = generateMovingAveragePrediction(data, targetColumn, predictionDays);
+          predictedData = movingAverageModel(data, targetColumn, predictionDays);
           break;
         case 'exponential':
-          predictedData = generateExponentialPrediction(data, targetColumn, predictionDays);
+          predictedData = exponentialSmoothingModel(data, targetColumn, predictionDays);
+          break;
+        case 'doubleExponential':
+          predictedData = doubleExponentialSmoothingModel(data, targetColumn, predictionDays);
+          break;
+        case 'arima':
+          predictedData = arimaLikeModel(data, targetColumn, predictionDays);
+          break;
+        case 'seasonal':
+          predictedData = seasonalNaiveModel(data, targetColumn, predictionDays);
+          break;
+        case 'meanReversion':
+          predictedData = meanReversionModel(data, targetColumn, predictionDays);
           break;
       }
       
@@ -177,6 +124,73 @@ const Prediction = () => {
       toast({
         title: "Error",
         description: "Failed to generate predictions",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const compareAllModels = () => {
+    if (!dataset || !targetColumn || !dateColumn) {
+      toast({
+        title: "Error",
+        description: "Please select target column and date column",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      // Use last 30 data points for all models
+      const data = dataset.data.slice(-30);
+      const comparisonResults: Record<string, any[]> = {};
+      
+      // Generate predictions for all models
+      predictionMethods.forEach(method => {
+        let predictedData;
+        
+        switch (method.id) {
+          case 'linear':
+            predictedData = linearRegressionModel(data, targetColumn, predictionDays);
+            break;
+          case 'movingAverage':
+            predictedData = movingAverageModel(data, targetColumn, predictionDays);
+            break;
+          case 'exponential':
+            predictedData = exponentialSmoothingModel(data, targetColumn, predictionDays);
+            break;
+          case 'doubleExponential':
+            predictedData = doubleExponentialSmoothingModel(data, targetColumn, predictionDays);
+            break;
+          case 'arima':
+            predictedData = arimaLikeModel(data, targetColumn, predictionDays);
+            break;
+          case 'seasonal':
+            predictedData = seasonalNaiveModel(data, targetColumn, predictionDays);
+            break;
+          case 'meanReversion':
+            predictedData = meanReversionModel(data, targetColumn, predictionDays);
+            break;
+        }
+        
+        comparisonResults[method.id] = predictedData;
+      });
+      
+      setModelComparison(comparisonResults);
+      setActiveTab('comparison');
+      
+      toast({
+        title: "Model Comparison Generated",
+        description: `Compared all prediction models for ${predictionDays} days.`,
+      });
+    } catch (error) {
+      console.error("Error generating model comparison:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate model comparison",
         variant: "destructive",
       });
     } finally {
@@ -214,6 +228,31 @@ const Prediction = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+  };
+
+  // Prepare data for model comparison chart
+  const prepareComparisonData = () => {
+    if (Object.keys(modelComparison).length === 0) return [];
+    
+    const result = [];
+    
+    // For each day in the prediction period
+    for (let i = 0; i < predictionDays; i++) {
+      const dayData: Record<string, any> = {
+        day: i + 1,
+        date: Object.values(modelComparison)[0][i]?.date || `Day ${i + 1}`
+      };
+      
+      // Add prediction for each model
+      Object.entries(modelComparison).forEach(([modelId, predictions]) => {
+        const predictionValue = predictions[i]?.[targetColumn];
+        dayData[modelId] = predictionValue;
+      });
+      
+      result.push(dayData);
+    }
+    
+    return result;
   };
 
   return (
@@ -268,9 +307,11 @@ const Prediction = () => {
                     <SelectValue placeholder="Select method" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="linear">Linear Regression</SelectItem>
-                    <SelectItem value="movingAverage">Moving Average</SelectItem>
-                    <SelectItem value="exponential">Exponential Smoothing</SelectItem>
+                    {predictionMethods.map(method => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -287,62 +328,178 @@ const Prediction = () => {
               </div>
             </div>
             
-            <Button 
-              onClick={generatePredictions}
-              disabled={isGenerating || !targetColumn || !dateColumn}
-              className="mb-6"
-            >
-              {isGenerating ? "Generating..." : "Generate Predictions"}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              <Button 
+                onClick={generatePredictions}
+                disabled={isGenerating || !targetColumn || !dateColumn}
+              >
+                {isGenerating ? "Generating..." : "Generate Predictions"}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+              
+              <Button 
+                variant="outline"
+                onClick={compareAllModels}
+                disabled={isGenerating || !targetColumn || !dateColumn}
+              >
+                Compare All Models
+              </Button>
+            </div>
             
-            {predictions.length > 0 && (
-              <div className="bg-finance-chart-bg rounded-lg p-4">
-                <ResponsiveContainer width="100%" height={400}>
-                  <RechartsLineChart 
-                    data={predictions} 
-                    margin={{ top: 20, right: 30, left: 20, bottom: 50 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis 
-                      dataKey={dateColumn} 
-                      angle={-45} 
-                      textAnchor="end" 
-                      height={60} 
-                      tick={{ fontSize: 12 }} 
-                    />
-                    <YAxis />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
-                      formatter={(value: number) => [formatValue(value), targetColumn]}
-                      labelFormatter={(label) => `Date: ${label}`}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey={targetColumn} 
-                      stroke="#1E88E5" 
-                      strokeWidth={2}
-                      dot={{ r: 1 }}
-                      activeDot={{ r: 5 }}
-                      name="Historical"
-                      connectNulls={true}
-                    />
-                    {/* Highlight prediction points */}
-                    <Line 
-                      type="monotone" 
-                      dataKey={(dataPoint) => dataPoint.isPrediction ? dataPoint[targetColumn] : null}
-                      stroke="#4CAF50" 
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={{ r: 3 }}
-                      activeDot={{ r: 7 }}
-                      name="Prediction"
-                      connectNulls={true}
-                    />
-                  </RechartsLineChart>
-                </ResponsiveContainer>
-              </div>
+            {(predictions.length > 0 || Object.keys(modelComparison).length > 0) && (
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="chart">Prediction Chart</TabsTrigger>
+                  <TabsTrigger value="comparison">Model Comparison</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="chart" className="mt-4">
+                  {predictions.length > 0 && (
+                    <div className="bg-finance-chart-bg rounded-lg p-4">
+                      <ResponsiveContainer width="100%" height={400}>
+                        <RechartsLineChart 
+                          data={predictions} 
+                          margin={{ top: 20, right: 30, left: 20, bottom: 50 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                          <XAxis 
+                            dataKey={dateColumn} 
+                            angle={-45} 
+                            textAnchor="end" 
+                            height={60} 
+                            tick={{ fontSize: 12 }} 
+                          />
+                          <YAxis />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
+                            formatter={(value: number) => [formatValue(value), targetColumn]}
+                            labelFormatter={(label) => `Date: ${label}`}
+                          />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey={targetColumn} 
+                            stroke="#1E88E5" 
+                            strokeWidth={2}
+                            dot={{ r: 1 }}
+                            activeDot={{ r: 5 }}
+                            name="Historical"
+                            connectNulls={true}
+                          />
+                          {/* Highlight prediction points */}
+                          <Line 
+                            type="monotone" 
+                            dataKey={(dataPoint) => dataPoint.isPrediction ? dataPoint[targetColumn] : null}
+                            stroke="#4CAF50" 
+                            strokeWidth={2}
+                            strokeDasharray="5 5"
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 7 }}
+                            name="Prediction"
+                            connectNulls={true}
+                          />
+                        </RechartsLineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </TabsContent>
+                
+                <TabsContent value="comparison" className="mt-4">
+                  {Object.keys(modelComparison).length > 0 && (
+                    <>
+                      <div className="bg-finance-chart-bg rounded-lg p-4 mb-6">
+                        <ResponsiveContainer width="100%" height={400}>
+                          <RechartsLineChart 
+                            data={prepareComparisonData()} 
+                            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                            <XAxis 
+                              dataKey="date" 
+                              angle={-45} 
+                              textAnchor="end" 
+                              height={60} 
+                              tick={{ fontSize: 12 }} 
+                            />
+                            <YAxis />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
+                              formatter={(value: number, name: string) => {
+                                const methodName = predictionMethods.find(m => m.id === name)?.name || name;
+                                return [formatValue(value), methodName];
+                              }}
+                              labelFormatter={(label) => `Date: ${label}`}
+                            />
+                            <Legend />
+                            {predictionMethods.map((method, index) => {
+                              // Different colors for each model
+                              const colors = ['#1E88E5', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#673AB7', '#FFEB3B'];
+                              return (
+                                <Line 
+                                  key={method.id}
+                                  type="monotone" 
+                                  dataKey={method.id} 
+                                  stroke={colors[index % colors.length]} 
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                  activeDot={{ r: 7 }}
+                                  name={method.name}
+                                />
+                              );
+                            })}
+                          </RechartsLineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              {predictionMethods.map(method => (
+                                <TableHead key={method.id}>{method.name}</TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {prepareComparisonData().map((day, index) => (
+                              <TableRow key={index}>
+                                <TableCell>{day.date}</TableCell>
+                                {predictionMethods.map(method => (
+                                  <TableCell key={method.id}>
+                                    {formatValue(day[method.id])}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      
+                      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {predictionMethods.map(method => (
+                          <div key={method.id} className="border rounded-lg p-4 flex flex-col h-full">
+                            <h3 className="font-medium text-lg mb-2">{method.name}</h3>
+                            <p className="text-sm text-muted-foreground mb-auto">{method.description}</p>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="mt-4 self-start"
+                              onClick={() => {
+                                setPredictionMethod(method.id as PredictionMethod);
+                                generatePredictions();
+                                setActiveTab('chart');
+                              }}
+                            >
+                              Use this model
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
             )}
           </CardContent>
         </Card>
