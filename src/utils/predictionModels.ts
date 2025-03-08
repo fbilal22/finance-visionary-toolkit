@@ -525,3 +525,162 @@ export const transformerModel = (data: any[], targetCol: string, daysToPredict: 
     return Math.tanh(correlation / values.length); // Normalize between -1 and 1
   }
 };
+
+/**
+ * Model Evaluation Utilities
+ * These functions help evaluate the performance of prediction models
+ */
+
+// Calculate Mean Absolute Error (MAE)
+export const calculateMAE = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) {
+    return 0;
+  }
+  
+  const sum = actual.reduce((acc, val, i) => acc + Math.abs(val - predicted[i]), 0);
+  return sum / actual.length;
+};
+
+// Calculate Mean Squared Error (MSE)
+export const calculateMSE = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) {
+    return 0;
+  }
+  
+  const sum = actual.reduce((acc, val, i) => acc + Math.pow(val - predicted[i], 2), 0);
+  return sum / actual.length;
+};
+
+// Calculate Root Mean Squared Error (RMSE)
+export const calculateRMSE = (actual: number[], predicted: number[]): number => {
+  return Math.sqrt(calculateMSE(actual, predicted));
+};
+
+// Calculate Mean Absolute Percentage Error (MAPE)
+export const calculateMAPE = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) {
+    return 0;
+  }
+  
+  let sum = 0;
+  let count = 0;
+  
+  for (let i = 0; i < actual.length; i++) {
+    if (actual[i] !== 0) {
+      sum += Math.abs((actual[i] - predicted[i]) / actual[i]);
+      count++;
+    }
+  }
+  
+  return count > 0 ? (sum / count) * 100 : 0;
+};
+
+// Calculate R-squared (Coefficient of Determination)
+export const calculateR2 = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) {
+    return 0;
+  }
+  
+  const meanActual = actual.reduce((sum, val) => sum + val, 0) / actual.length;
+  
+  const ssTotal = actual.reduce((sum, val) => sum + Math.pow(val - meanActual, 2), 0);
+  const ssResidual = actual.reduce((sum, val, i) => sum + Math.pow(val - predicted[i], 2), 0);
+  
+  return ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
+};
+
+// Calculate Directional Accuracy (DA) - percentage of correctly predicted directions
+export const calculateDirectionalAccuracy = (actual: number[], predicted: number[]): number => {
+  if (actual.length <= 1 || predicted.length <= 1 || actual.length !== predicted.length) {
+    return 0;
+  }
+  
+  let correctDirections = 0;
+  
+  for (let i = 1; i < actual.length; i++) {
+    const actualDirection = actual[i] - actual[i-1];
+    const predictedDirection = predicted[i] - predicted[i-1];
+    
+    if ((actualDirection >= 0 && predictedDirection >= 0) || 
+        (actualDirection < 0 && predictedDirection < 0)) {
+      correctDirections++;
+    }
+  }
+  
+  return (correctDirections / (actual.length - 1)) * 100;
+};
+
+// Generate backtesting results for model evaluation
+export const generateBacktestResults = (data: any[], targetCol: string, modelFn: Function, testWindowSize: number = 7) => {
+  if (data.length < testWindowSize * 2) {
+    return {
+      mae: 0,
+      mse: 0,
+      rmse: 0,
+      mape: 0,
+      r2: 0,
+      directionalAccuracy: 0,
+      predictedValues: [],
+      actualValues: []
+    };
+  }
+  
+  // Split data into training and test sets
+  const trainingData = data.slice(0, data.length - testWindowSize);
+  const testData = data.slice(data.length - testWindowSize);
+  
+  // Generate predictions using the model
+  const predictions = modelFn(trainingData, targetCol, testWindowSize);
+  
+  // Extract actual and predicted values
+  const actualValues = testData.map(item => item[targetCol]);
+  const predictedValues = predictions.map(item => item[targetCol]);
+  
+  // Calculate evaluation metrics
+  const mae = calculateMAE(actualValues, predictedValues);
+  const mse = calculateMSE(actualValues, predictedValues);
+  const rmse = calculateRMSE(actualValues, predictedValues);
+  const mape = calculateMAPE(actualValues, predictedValues);
+  const r2 = calculateR2(actualValues, predictedValues);
+  const directionalAccuracy = calculateDirectionalAccuracy(actualValues, predictedValues);
+  
+  return {
+    mae,
+    mse,
+    rmse,
+    mape,
+    r2,
+    directionalAccuracy,
+    predictedValues,
+    actualValues
+  };
+};
+
+// Get an overall model score (0-100) based on multiple metrics
+export const calculateModelScore = (metrics: { 
+  mae: number, 
+  rmse: number, 
+  mape: number, 
+  r2: number, 
+  directionalAccuracy: number 
+}): number => {
+  // Define weights for each metric
+  const weights = {
+    mape: 0.25,      // Lower is better
+    r2: 0.25,        // Higher is better
+    directionalAccuracy: 0.5  // Higher is better
+  };
+  
+  // Calculate normalized scores (0-100)
+  const mapeScore = Math.max(0, 100 - metrics.mape);
+  const r2Score = Math.max(0, metrics.r2 * 100);
+  const daScore = metrics.directionalAccuracy;
+  
+  // Calculate weighted score
+  const weightedScore = 
+    mapeScore * weights.mape +
+    r2Score * weights.r2 +
+    daScore * weights.directionalAccuracy;
+  
+  return Math.round(weightedScore);
+};
