@@ -11,6 +11,7 @@ import Import from "./pages/Import";
 import Data from "./pages/Data";
 import Visualization from "./pages/Visualization";
 import Cleaning from "./pages/Cleaning";
+import Prediction from "./pages/Prediction";
 
 const queryClient = new QueryClient();
 
@@ -27,7 +28,7 @@ const App = () => (
             <Route path="/data" element={<Data />} />
             <Route path="/visualization" element={<Visualization />} />
             <Route path="/cleaning" element={<Cleaning />} />
-            <Route path="/prediction" element={<NotFound />} />
+            <Route path="/prediction" element={<Prediction />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
