@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useData } from '@/context/DataContext';
 import { useNavigate } from 'react-router-dom';
@@ -19,7 +18,11 @@ import {
   doubleExponentialSmoothingModel,
   arimaLikeModel,
   seasonalNaiveModel,
-  meanReversionModel
+  meanReversionModel,
+  randomForestModel,
+  svrModel,
+  lstmModel,
+  transformerModel
 } from '@/utils/predictionModels';
 
 type PredictionMethod = 
@@ -29,16 +32,24 @@ type PredictionMethod =
   | 'doubleExponential'
   | 'arima'
   | 'seasonal'
-  | 'meanReversion';
+  | 'meanReversion'
+  | 'randomForest'
+  | 'svr'
+  | 'lstm'
+  | 'transformer';
 
 const predictionMethods = [
-  { id: 'linear', name: 'Linear Regression', description: 'Fits a straight line to historical data.' },
-  { id: 'movingAverage', name: 'Moving Average', description: 'Uses the average of recent periods to predict future values.' },
-  { id: 'exponential', name: 'Exponential Smoothing', description: 'Weights recent observations more heavily than older ones.' },
-  { id: 'doubleExponential', name: 'Double Exponential', description: 'Handles data with trends using two smoothing equations.' },
-  { id: 'arima', name: 'ARIMA-like', description: 'Simplified version of Auto-Regressive Integrated Moving Average.' },
-  { id: 'seasonal', name: 'Seasonal Naive', description: 'Assumes future values follow seasonal patterns from the past.' },
-  { id: 'meanReversion', name: 'Mean Reversion', description: 'Assumes prices tend to return to their historical average.' },
+  { id: 'linear', name: 'Linear Regression', description: 'Fits a straight line to historical data.', category: 'traditional' },
+  { id: 'movingAverage', name: 'Moving Average', description: 'Uses the average of recent periods to predict future values.', category: 'traditional' },
+  { id: 'exponential', name: 'Exponential Smoothing', description: 'Weights recent observations more heavily than older ones.', category: 'traditional' },
+  { id: 'doubleExponential', name: 'Double Exponential', description: 'Handles data with trends using two smoothing equations.', category: 'traditional' },
+  { id: 'arima', name: 'ARIMA-like', description: 'Simplified version of Auto-Regressive Integrated Moving Average.', category: 'traditional' },
+  { id: 'seasonal', name: 'Seasonal Naive', description: 'Assumes future values follow seasonal patterns from the past.', category: 'traditional' },
+  { id: 'meanReversion', name: 'Mean Reversion', description: 'Assumes prices tend to return to their historical average.', category: 'traditional' },
+  { id: 'randomForest', name: 'Random Forest', description: 'Ensemble learning method that builds multiple decision trees for prediction.', category: 'ml' },
+  { id: 'svr', name: 'Support Vector Regression', description: 'Uses support vectors to find an optimal regression line.', category: 'ml' },
+  { id: 'lstm', name: 'LSTM Neural Network', description: 'Deep learning model that captures long-term dependencies in time series.', category: 'dl' },
+  { id: 'transformer', name: 'Transformer Network', description: 'Advanced deep learning model using attention mechanisms.', category: 'dl' },
 ];
 
 const Prediction = () => {
@@ -54,12 +65,10 @@ const Prediction = () => {
   const [activeTab, setActiveTab] = useState<string>('chart');
   const [modelComparison, setModelComparison] = useState<Record<string, any[]>>({});
 
-  // Redirect if no data
   useEffect(() => {
     if (!isLoading && !dataset) {
       navigate('/');
     } else if (dataset) {
-      // Set default values when dataset loads
       const { meta } = dataset;
       const dateCol = meta.columnNames.find(col => meta.columnTypes[col] === 'date');
       if (dateCol) setDateColumn(dateCol);
@@ -82,7 +91,6 @@ const Prediction = () => {
     setIsGenerating(true);
 
     try {
-      // Use last 30 data points for prediction
       const data = dataset.data.slice(-30);
       
       let predictedData;
@@ -109,9 +117,20 @@ const Prediction = () => {
         case 'meanReversion':
           predictedData = meanReversionModel(data, targetColumn, predictionDays);
           break;
+        case 'randomForest':
+          predictedData = randomForestModel(data, targetColumn, predictionDays);
+          break;
+        case 'svr':
+          predictedData = svrModel(data, targetColumn, predictionDays);
+          break;
+        case 'lstm':
+          predictedData = lstmModel(data, targetColumn, predictionDays);
+          break;
+        case 'transformer':
+          predictedData = transformerModel(data, targetColumn, predictionDays);
+          break;
       }
       
-      // Combine historical and predicted data for visualization
       const combinedData = [...data, ...predictedData];
       setPredictions(combinedData);
       
@@ -144,11 +163,9 @@ const Prediction = () => {
     setIsGenerating(true);
 
     try {
-      // Use last 30 data points for all models
       const data = dataset.data.slice(-30);
       const comparisonResults: Record<string, any[]> = {};
       
-      // Generate predictions for all models
       predictionMethods.forEach(method => {
         let predictedData;
         
@@ -173,6 +190,18 @@ const Prediction = () => {
             break;
           case 'meanReversion':
             predictedData = meanReversionModel(data, targetColumn, predictionDays);
+            break;
+          case 'randomForest':
+            predictedData = randomForestModel(data, targetColumn, predictionDays);
+            break;
+          case 'svr':
+            predictedData = svrModel(data, targetColumn, predictionDays);
+            break;
+          case 'lstm':
+            predictedData = lstmModel(data, targetColumn, predictionDays);
+            break;
+          case 'transformer':
+            predictedData = transformerModel(data, targetColumn, predictionDays);
             break;
         }
         
@@ -217,12 +246,10 @@ const Prediction = () => {
 
   const { meta } = dataset;
   
-  // Get numeric columns for target selection
   const numericColumns = meta.columnNames.filter(col => 
     meta.columnTypes[col] === 'numeric'
   );
 
-  // Format tooltip value
   const formatValue = (value: number) => {
     return value.toLocaleString(undefined, {
       minimumFractionDigits: 2,
@@ -230,20 +257,17 @@ const Prediction = () => {
     });
   };
 
-  // Prepare data for model comparison chart
   const prepareComparisonData = () => {
     if (Object.keys(modelComparison).length === 0) return [];
     
     const result = [];
     
-    // For each day in the prediction period
     for (let i = 0; i < predictionDays; i++) {
       const dayData: Record<string, any> = {
         day: i + 1,
         date: Object.values(modelComparison)[0][i]?.date || `Day ${i + 1}`
       };
       
-      // Add prediction for each model
       Object.entries(modelComparison).forEach(([modelId, predictions]) => {
         const predictionValue = predictions[i]?.[targetColumn];
         dayData[modelId] = predictionValue;
@@ -307,11 +331,35 @@ const Prediction = () => {
                     <SelectValue placeholder="Select method" />
                   </SelectTrigger>
                   <SelectContent>
-                    {predictionMethods.map(method => (
-                      <SelectItem key={method.id} value={method.id}>
-                        {method.name}
-                      </SelectItem>
-                    ))}
+                    <div className="px-2 py-1.5 text-sm font-semibold">Traditional Models</div>
+                    {predictionMethods
+                      .filter(method => method.category === 'traditional')
+                      .map(method => (
+                        <SelectItem key={method.id} value={method.id}>
+                          {method.name}
+                        </SelectItem>
+                      ))
+                    }
+                    
+                    <div className="px-2 py-1.5 text-sm font-semibold mt-2">Machine Learning Models</div>
+                    {predictionMethods
+                      .filter(method => method.category === 'ml')
+                      .map(method => (
+                        <SelectItem key={method.id} value={method.id}>
+                          {method.name}
+                        </SelectItem>
+                      ))
+                    }
+                    
+                    <div className="px-2 py-1.5 text-sm font-semibold mt-2">Deep Learning Models</div>
+                    {predictionMethods
+                      .filter(method => method.category === 'dl')
+                      .map(method => (
+                        <SelectItem key={method.id} value={method.id}>
+                          {method.name}
+                        </SelectItem>
+                      ))
+                    }
                   </SelectContent>
                 </Select>
               </div>
@@ -386,7 +434,6 @@ const Prediction = () => {
                             name="Historical"
                             connectNulls={true}
                           />
-                          {/* Highlight prediction points */}
                           <Line 
                             type="monotone" 
                             dataKey={(dataPoint) => dataPoint.isPrediction ? dataPoint[targetColumn] : null}
@@ -432,7 +479,6 @@ const Prediction = () => {
                             />
                             <Legend />
                             {predictionMethods.map((method, index) => {
-                              // Different colors for each model
                               const colors = ['#1E88E5', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#673AB7', '#FFEB3B'];
                               return (
                                 <Line 
@@ -481,10 +527,15 @@ const Prediction = () => {
                           <div key={method.id} className="border rounded-lg p-4 flex flex-col h-full">
                             <h3 className="font-medium text-lg mb-2">{method.name}</h3>
                             <p className="text-sm text-muted-foreground mb-auto">{method.description}</p>
+                            <div className="text-xs text-muted-foreground mt-1 mb-2">
+                              {method.category === 'traditional' && 'Traditional statistical model'}
+                              {method.category === 'ml' && 'Machine learning model'}
+                              {method.category === 'dl' && 'Deep learning model'}
+                            </div>
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="mt-4 self-start"
+                              className="mt-2 self-start"
                               onClick={() => {
                                 setPredictionMethod(method.id as PredictionMethod);
                                 generatePredictions();

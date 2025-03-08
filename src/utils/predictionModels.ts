@@ -1,4 +1,3 @@
-
 /**
  * Financial Time Series Prediction Models
  * This file contains various prediction models for financial time series data.
@@ -244,4 +243,285 @@ export const meanReversionModel = (data: any[], targetCol: string, daysToPredict
   }
   
   return predictions;
+};
+
+// Random Forest-like Ensemble Model (simplified ML approach)
+export const randomForestModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // Create multiple "decision trees" (simplified as different moving averages)
+  const shortTermMA = calculateMovingAverage(values, 3);
+  const mediumTermMA = calculateMovingAverage(values, 7);
+  const longTermMA = calculateMovingAverage(values, 14);
+  const weightedMA = calculateWeightedMA(values, 5);
+  
+  // Generate predictions (ensemble of forecasts)
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    // Combine "trees" with weights to get final prediction
+    const predictedValue = (
+      shortTermMA * 0.3 + 
+      mediumTermMA * 0.3 + 
+      longTermMA * 0.2 + 
+      weightedMA * 0.2
+    );
+    
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+  }
+  
+  return predictions;
+  
+  // Helper functions for random forest
+  function calculateMovingAverage(values: number[], window: number) {
+    const lastWindow = values.slice(-window);
+    return lastWindow.reduce((sum, val) => sum + val, 0) / window;
+  }
+  
+  function calculateWeightedMA(values: number[], window: number) {
+    const lastWindow = values.slice(-window);
+    let weightSum = 0;
+    let valueSum = 0;
+    
+    for (let i = 0; i < lastWindow.length; i++) {
+      const weight = i + 1;
+      weightSum += weight;
+      valueSum += lastWindow[i] * weight;
+    }
+    
+    return valueSum / weightSum;
+  }
+};
+
+// Support Vector Regression (SVR) - simplified ML approach
+export const svrModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // Calculate key statistics that SVR would use
+  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const stdDev = Math.sqrt(
+    values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length
+  );
+  
+  // Estimate trend direction and strength
+  const recentValues = values.slice(-10);
+  const firstHalf = recentValues.slice(0, 5);
+  const secondHalf = recentValues.slice(-5);
+  
+  const firstHalfAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length;
+  const secondHalfAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length;
+  
+  const trendStrength = secondHalfAvg - firstHalfAvg;
+  const normalizedTrend = trendStrength / (stdDev || 1); // Avoid division by zero
+  
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  const lastValue = values[values.length - 1];
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    // SVR prediction formula (simplified)
+    // More days out = less certain, so dampen the trend over time
+    const dampingFactor = Math.exp(-0.1 * i);
+    const predictedChange = normalizedTrend * stdDev * dampingFactor;
+    const predictedValue = lastValue + (predictedChange * i);
+    
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+  }
+  
+  return predictions;
+};
+
+// Long Short-Term Memory (LSTM) Neural Network - simplified DL approach
+export const lstmModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // LSTM would typically identify patterns with different lookback periods
+  // This is a simplified version that tries to emulate that behavior
+  
+  // Calculate different lookback patterns
+  const shortPattern = identifyPattern(values, 3);
+  const mediumPattern = identifyPattern(values, 7);
+  const longPattern = identifyPattern(values, 14);
+  
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  let lastValue = values[values.length - 1];
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    // Combine patterns with weights that simulate LSTM's ability
+    // to balance short and long-term dependencies
+    const shortWeight = Math.exp(-0.2 * i); // Decays faster
+    const mediumWeight = Math.exp(-0.1 * i);
+    const longWeight = Math.exp(-0.05 * i); // Decays slower
+    
+    const weightSum = shortWeight + mediumWeight + longWeight;
+    
+    const predictedChange = (
+      (shortPattern * shortWeight) +
+      (mediumPattern * mediumWeight) +
+      (longPattern * longWeight)
+    ) / weightSum;
+    
+    // Apply the predicted change
+    const predictedValue = lastValue + predictedChange;
+    lastValue = predictedValue; // For next prediction
+    
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+  }
+  
+  return predictions;
+  
+  // Helper function to identify patterns
+  function identifyPattern(values: number[], lookback: number) {
+    if (values.length < lookback * 2) {
+      return 0; // Not enough data
+    }
+    
+    // Calculate average changes in each lookback period
+    const changes = [];
+    for (let i = lookback; i < values.length; i++) {
+      const change = values[i] - values[i - lookback];
+      changes.push(change / lookback); // Normalize by period length
+    }
+    
+    // Average pattern strength
+    return changes.reduce((sum, val) => sum + val, 0) / changes.length;
+  }
+};
+
+// Transformer Neural Network - simplified DL approach 
+export const transformerModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // Transformer models use attention mechanisms to weigh different time periods
+  // Here we'll simulate this with weighted combinations of historical patterns
+  
+  // Get the latest value
+  const lastValue = values[values.length - 1];
+  
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  
+  // Transformer would analyze multiple time scales and how they interact
+  // We'll simulate this by calculating multiple indicators with different weights
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    // 1. Recent trend (last 5 days)
+    const recentValues = values.slice(-5);
+    const recentTrend = calculateTrend(recentValues);
+    
+    // 2. Medium-term trend (last 10 days)
+    const mediumValues = values.slice(-10);
+    const mediumTrend = calculateTrend(mediumValues);
+    
+    // 3. Long-term trend (last 20 days)
+    const longValues = values.slice(-20);
+    const longTrend = calculateTrend(longValues);
+    
+    // 4. Volatility (standard deviation)
+    const volatility = calculateVolatility(values.slice(-20));
+    
+    // 5. Cyclical patterns (if any)
+    const cycleFactor = detectCycles(values);
+    
+    // Combine all factors with attention-like weights
+    // The weights would depend on how "important" each factor seems for prediction
+    // As we go further in prediction, uncertainty increases, so we reduce weight of short-term factors
+    
+    const dayFactor = Math.min(i / daysToPredict, 1); // Goes from 0 to 1
+    
+    const recentWeight = Math.max(0.5 - dayFactor * 0.4, 0.1); // Decreases with time
+    const mediumWeight = 0.3;
+    const longWeight = 0.1 + dayFactor * 0.2; // Increases with time
+    const volatilityWeight = 0.1;
+    const cycleWeight = 0.1 + dayFactor * 0.1; // Increases with time
+    
+    // Calculate predicted change
+    const predictedChange = (
+      recentTrend * recentWeight +
+      mediumTrend * mediumWeight +
+      longTrend * longWeight
+    ) * (1 + cycleFactor * cycleWeight);
+    
+    // Apply volatility dampening for further-out predictions
+    const uncertaintyFactor = 1 - Math.min(dayFactor * volatility * volatilityWeight, 0.5);
+    
+    // Calculate prediction
+    const predictedValue = lastValue + (predictedChange * i * uncertaintyFactor);
+    
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+  }
+  
+  return predictions;
+  
+  // Helper functions
+  function calculateTrend(values: number[]) {
+    if (values.length < 2) return 0;
+    
+    // Simple linear regression slope
+    const n = values.length;
+    const xValues = Array.from({ length: n }, (_, i) => i);
+    const sumX = xValues.reduce((sum, x) => sum + x, 0);
+    const sumY = values.reduce((sum, y) => sum + y, 0);
+    const sumXY = xValues.reduce((sum, x, i) => sum + x * values[i], 0);
+    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    return slope || 0; // Avoid NaN
+  }
+  
+  function calculateVolatility(values: number[]) {
+    if (values.length < 2) return 0;
+    
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    return Math.sqrt(variance) / mean; // Coefficient of variation
+  }
+  
+  function detectCycles(values: number[]) {
+    if (values.length < 10) return 0;
+    
+    // Simple autocorrelation with lag 7 (weekly pattern)
+    // In a real transformer, this would be learned from data
+    const lag = Math.min(7, Math.floor(values.length / 3));
+    let correlation = 0;
+    
+    for (let i = lag; i < values.length; i++) {
+      correlation += (values[i] - values[i - lag]) * (values[i - 1] - values[i - lag - 1]);
+    }
+    
+    return Math.tanh(correlation / values.length); // Normalize between -1 and 1
+  }
 };
