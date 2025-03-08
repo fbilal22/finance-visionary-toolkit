@@ -277,7 +277,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   const validData = structuredData.filter(item => item.date && item.date !== '');
 
   // Get the list of column names from the column mapping
-  const columnNames = Object.values(columnMapping);
+  const derivedColumnNames = Object.values(columnMapping);
   
   // Analyze dataset for metadata
   const missingValues: Record<string, number> = {};
@@ -290,13 +290,13 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   }> = {};
   
   // Initialize missing values counters for all columns
-  columnNames.forEach(mappedCol => {
+  derivedColumnNames.forEach(mappedCol => {
     missingValues[mappedCol] = 0;
   });
   
   // Count missing values
   validData.forEach(row => {
-    columnNames.forEach(column => {
+    derivedColumnNames.forEach(column => {
       if (row[column] === undefined || row[column] === '') {
         missingValues[column] = (missingValues[column] || 0) + 1;
       }
@@ -304,7 +304,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   });
   
   // Generate summary statistics for numeric columns
-  columnNames.forEach(column => {
+  derivedColumnNames.forEach(column => {
     // Find the original column for type checking
     const originalCol = Object.keys(columnMapping).find(key => columnMapping[key] === column);
     
@@ -339,14 +339,14 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   
   console.log("Processed data:", {
     rowCount: validData.length,
-    columnNames,
+    columnNames: derivedColumnNames,
     firstRow: validData[0]
   });
   
   return {
     data: validData,
     meta: {
-      columnNames,
+      columnNames: derivedColumnNames,
       columnTypes,
       rowCount: validData.length,
       missingValues,

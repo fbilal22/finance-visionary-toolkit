@@ -160,7 +160,7 @@ const Cleaning = () => {
                               </SelectItem>
                             ))
                           ) : (
-                            <SelectItem value="" disabled>
+                            <SelectItem key="no-missing" value="no-missing" disabled>
                               No columns with missing values
                             </SelectItem>
                           )}
@@ -291,11 +291,17 @@ const Cleaning = () => {
                           <SelectValue placeholder="Select column" />
                         </SelectTrigger>
                         <SelectContent>
-                          {numericColumns.map(col => (
-                            <SelectItem key={col} value={col}>
-                              {col}
+                          {numericColumns.length > 0 ? (
+                            numericColumns.map(col => (
+                              <SelectItem key={col} value={col}>
+                                {col}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem key="no-numeric" value="no-numeric" disabled>
+                              No numeric columns available
                             </SelectItem>
-                          ))}
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
