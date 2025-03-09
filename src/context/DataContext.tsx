@@ -38,36 +38,57 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Read the file content
       const text = await file.text();
       
-      // Import the processing function dynamically to reduce initial load time
-      const { processCSVData } = await import('@/utils/dataProcessing');
-      
-      // Process the CSV data
-      const processed = processCSVData(text, file.name);
-      
-      if (processed.data.length === 0) {
-        throw new Error("No valid data rows could be processed. Please check the file format.");
+      // Process based on file type
+      if (file.type === 'application/json' || file.name.endsWith('.json')) {
+        // Import the processing function dynamically to reduce initial load time
+        const { processJSONData } = await import('@/utils/dataProcessing');
+        
+        // Process the JSON data
+        const processed = processJSONData(text, file.name);
+        
+        if (processed.data.length === 0) {
+          throw new Error("No valid data rows could be processed. Please check the file format.");
+        }
+        
+        console.log("Processed JSON data:", {
+          rowCount: processed.data.length,
+          columnNames: processed.meta.columnNames,
+          firstRow: processed.data[0]
+        });
+        
+        setDataset(processed);
+      } else {
+        // Import the processing function dynamically to reduce initial load time
+        const { processCSVData } = await import('@/utils/dataProcessing');
+        
+        // Process the CSV data
+        const processed = processCSVData(text, file.name);
+        
+        if (processed.data.length === 0) {
+          throw new Error("No valid data rows could be processed. Please check the file format.");
+        }
+        
+        console.log("Processed CSV data:", {
+          rowCount: processed.data.length,
+          columnNames: processed.meta.columnNames,
+          firstRow: processed.data[0]
+        });
+        
+        setDataset(processed);
       }
-      
-      console.log("Processed data:", {
-        rowCount: processed.data.length,
-        columnNames: processed.meta.columnNames,
-        firstRow: processed.data[0]
-      });
-      
-      setDataset(processed);
       
       // Clear any existing model predictions when loading new data
       setModelPredictions([]);
       
       toast({
-        title: "Data Loaded Successfully",
-        description: `${processed.meta.rowCount} rows and ${processed.meta.columnNames.length} columns imported.`,
+        title: "Données chargées avec succès",
+        description: `${dataset?.meta.rowCount || 0} lignes et ${dataset?.meta.columnNames.length || 0} colonnes importées.`,
       });
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
-        title: "Error Loading Data",
-        description: error instanceof Error ? error.message : "The file couldn't be processed. Please check the format.",
+        title: "Erreur lors du chargement des données",
+        description: error instanceof Error ? error.message : "Le fichier n'a pas pu être traité. Veuillez vérifier le format.",
         variant: "destructive",
       });
     } finally {

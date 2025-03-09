@@ -2,8 +2,8 @@
 import React, { useCallback, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Database, FilePlus2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Import = () => {
@@ -12,8 +12,9 @@ const Import = () => {
   const navigate = useNavigate();
 
   const handleFile = useCallback(async (file: File) => {
-    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-      alert('Please upload a CSV file');
+    if (file.type !== 'text/csv' && !file.name.endsWith('.csv') && 
+        file.type !== 'application/json' && !file.name.endsWith('.json')) {
+      alert('Please upload a CSV or JSON file');
       return;
     }
     await loadDataset(file);
@@ -54,97 +55,60 @@ const Import = () => {
 
   return (
     <div className="container py-8">
-      <h1 className="text-3xl font-bold mb-6">Import Financial Data</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload size={20} />
-              Upload CSV File
-            </CardTitle>
-            <CardDescription>
-              Import your financial data from a CSV file
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`border-2 border-dashed rounded-lg p-12 text-center ${
-                dragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/20'
-              }`}
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
-            >
-              <div className="flex flex-col items-center justify-center space-y-4">
-                <Upload 
-                  size={48} 
-                  className={`${dragActive ? 'text-primary' : 'text-muted-foreground'}`} 
-                />
-                <div>
-                  <p className="text-lg font-medium">
-                    Drag & Drop your CSV file here
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    or click to browse files
-                  </p>
-                </div>
-                <input
-                  id="file-upload"
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={handleChange}
-                  disabled={isLoading}
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => document.getElementById('file-upload')?.click()}
-                  disabled={isLoading}
-                >
-                  Select File
-                </Button>
-              </div>
+      <h1 className="text-2xl font-bold mb-8">Importation de fichiers</h1>
+      
+      <Card className="border border-dashed">
+        <CardContent className="p-0">
+          <div
+            className={`flex flex-col items-center justify-center py-12 px-4 text-center ${
+              dragActive ? 'bg-primary/5' : ''
+            }`}
+            onDragEnter={handleDrag}
+            onDragOver={handleDrag}
+            onDragLeave={handleDrag}
+            onDrop={handleDrop}
+          >
+            <Upload 
+              size={48} 
+              className={`mb-4 ${dragActive ? 'text-primary' : 'text-muted-foreground'}`} 
+            />
+            
+            <h3 className="text-lg font-medium mb-2">
+              Cliquez pour importer un fichier CSV, JSON, Excel
+            </h3>
+            
+            <p className="text-sm text-muted-foreground mb-6">
+              Formats supportés: .csv, .json
+            </p>
+            
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Button
+                onClick={() => document.getElementById('file-upload')?.click()}
+                disabled={isLoading}
+              >
+                Sélectionner un fichier
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={handleSampleData}
+                disabled={isLoading}
+              >
+                Charger des données d'exemple
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database size={20} />
-              Sample Data
-            </CardTitle>
-            <CardDescription>
-              Load sample financial data to explore the application
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="border rounded-lg p-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <FilePlus2 size={48} className="text-muted-foreground" />
-                <div>
-                  <p className="text-lg font-medium">
-                    No file to upload?
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Try our sample stock market dataset to explore the app's features
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              className="w-full" 
-              onClick={handleSampleData}
+            
+            <input
+              id="file-upload"
+              type="file"
+              accept=".csv,.json"
+              className="hidden"
+              onChange={handleChange}
               disabled={isLoading}
-            >
-              Load Sample Data
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+            />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
