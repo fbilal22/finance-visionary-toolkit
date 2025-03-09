@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useData } from '@/context/DataContext';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Slider } from '@/components/ui/slider';
 import { AlertCircle, LineChart, ArrowRight, BarChart2 } from 'lucide-react';
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { toast } from '@/components/ui/use-toast';
@@ -84,6 +86,12 @@ const Prediction = () => {
   const [modelEvaluations, setModelEvaluations] = useState<Record<string, any>>({});
   const [backtestWindowSize, setBacktestWindowSize] = useState<number>(7);
 
+  // Data splitting settings
+  const [trainTestSplit, setTrainTestSplit] = useState<number>(80);
+  const [trainingData, setTrainingData] = useState<any[]>([]);
+  const [testingData, setTestingData] = useState<any[]>([]);
+  const [selectedPredictionPoint, setSelectedPredictionPoint] = useState<number | null>(null);
+  
   useEffect(() => {
     if (!isLoading && !dataset) {
       navigate('/');
@@ -94,8 +102,35 @@ const Prediction = () => {
       
       const numericCols = meta.columnNames.filter(col => meta.columnTypes[col] === 'numeric');
       if (numericCols.length > 0) setTargetColumn(numericCols[0]);
+      
+      // Split data when dataset changes
+      splitData(dataset.data, trainTestSplit);
     }
   }, [dataset, isLoading, navigate]);
+
+  // Effect to split data when trainTestSplit changes
+  useEffect(() => {
+    if (dataset) {
+      splitData(dataset.data, trainTestSplit);
+    }
+  }, [trainTestSplit, dataset]);
+
+  // Function to split the data into training and testing sets
+  const splitData = (data: any[], splitRatio: number) => {
+    if (!data || data.length === 0) return;
+    
+    const splitIndex = Math.floor(data.length * (splitRatio / 100));
+    const training = data.slice(0, splitIndex);
+    const testing = data.slice(splitIndex);
+    
+    setTrainingData(training);
+    setTestingData(testing);
+    
+    // Default the selected prediction point to the start of the test set
+    if (selectedPredictionPoint === null) {
+      setSelectedPredictionPoint(splitIndex);
+    }
+  };
 
   const generatePredictions = () => {
     if (!dataset || !targetColumn || !dateColumn) {
@@ -107,65 +142,76 @@ const Prediction = () => {
       return;
     }
 
+    if (!selectedPredictionPoint) {
+      toast({
+        title: "Error",
+        description: "Please select a prediction starting point",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
-      const data = dataset.data.slice(-30);
+      // Use training data up to the selected prediction point
+      const dataForPrediction = dataset.data.slice(0, selectedPredictionPoint);
       
       let predictedData;
       
       switch (predictionMethod) {
         case 'linear':
-          predictedData = linearRegressionModel(data, targetColumn, predictionDays);
+          predictedData = linearRegressionModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'movingAverage':
-          predictedData = movingAverageModel(data, targetColumn, predictionDays);
+          predictedData = movingAverageModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'exponential':
-          predictedData = exponentialSmoothingModel(data, targetColumn, predictionDays);
+          predictedData = exponentialSmoothingModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'doubleExponential':
-          predictedData = doubleExponentialSmoothingModel(data, targetColumn, predictionDays);
+          predictedData = doubleExponentialSmoothingModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'arima':
-          predictedData = arimaLikeModel(data, targetColumn, predictionDays);
+          predictedData = arimaLikeModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'autoARIMA':
-          predictedData = autoARIMAModel(data, targetColumn, predictionDays);
+          predictedData = autoARIMAModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'seasonal':
-          predictedData = seasonalNaiveModel(data, targetColumn, predictionDays);
+          predictedData = seasonalNaiveModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'meanReversion':
-          predictedData = meanReversionModel(data, targetColumn, predictionDays);
+          predictedData = meanReversionModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'randomForest':
-          predictedData = randomForestModel(data, targetColumn, predictionDays);
+          predictedData = randomForestModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'svr':
-          predictedData = svrModel(data, targetColumn, predictionDays);
+          predictedData = svrModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'lstm':
-          predictedData = lstmModel(data, targetColumn, predictionDays);
+          predictedData = lstmModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'transformer':
-          predictedData = transformerModel(data, targetColumn, predictionDays);
+          predictedData = transformerModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'prophet':
-          predictedData = prophetModel(data, targetColumn, predictionDays);
+          predictedData = prophetModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'xgboost':
-          predictedData = xgboostModel(data, targetColumn, predictionDays);
+          predictedData = xgboostModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'bsts':
-          predictedData = bstsModel(data, targetColumn, predictionDays);
+          predictedData = bstsModel(dataForPrediction, targetColumn, predictionDays);
           break;
         case 'gam':
-          predictedData = gamModel(data, targetColumn, predictionDays);
+          predictedData = gamModel(dataForPrediction, targetColumn, predictionDays);
           break;
       }
       
-      const combinedData = [...data, ...predictedData];
+      // Combine historical data and predictions for visualization
+      const combinedData = [...dataset.data, ...predictedData];
       setPredictions(combinedData);
       
       toast({
@@ -194,10 +240,20 @@ const Prediction = () => {
       return;
     }
 
+    if (!selectedPredictionPoint) {
+      toast({
+        title: "Error",
+        description: "Please select a prediction starting point",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
-      const data = dataset.data.slice(-30);
+      // Use training data for model evaluation
+      const dataForEvaluation = dataset.data.slice(0, selectedPredictionPoint);
       const comparisonResults: Record<string, any[]> = {};
       const evaluationResults: Record<string, any> = {};
       
@@ -255,10 +311,10 @@ const Prediction = () => {
             break;
         }
         
-        const predictedData = modelFn(data, targetColumn, predictionDays);
+        const predictedData = modelFn(dataForEvaluation, targetColumn, predictionDays);
         comparisonResults[method.id] = predictedData;
         
-        const evaluation = generateBacktestResults(dataset.data, targetColumn, modelFn, backtestWindowSize);
+        const evaluation = generateBacktestResults(dataForEvaluation, targetColumn, modelFn, backtestWindowSize);
         const modelScore = calculateModelScore(evaluation);
         
         evaluationResults[method.id] = {
@@ -284,6 +340,20 @@ const Prediction = () => {
       });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Find the index position based on a date
+  const findDataPointIndex = (date: string) => {
+    if (!dataset?.data) return 0;
+    return dataset.data.findIndex(d => d.date === date);
+  };
+
+  // Handle prediction point selection
+  const handlePredictionPointChange = (date: string) => {
+    const index = findDataPointIndex(date);
+    if (index >= 0) {
+      setSelectedPredictionPoint(index);
     }
   };
 
@@ -322,6 +392,18 @@ const Prediction = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }) + '%';
+  };
+
+  // Prepare data for visualization
+  const prepareDataVisualization = () => {
+    if (!dataset?.data || dataset.data.length === 0) return [];
+    
+    return dataset.data.map((dataPoint, index) => ({
+      ...dataPoint,
+      isTraining: index < (dataset.data.length * (trainTestSplit / 100)),
+      isTesting: index >= (dataset.data.length * (trainTestSplit / 100)),
+      isPredictionPoint: selectedPredictionPoint !== null && index === selectedPredictionPoint
+    }));
   };
 
   const prepareComparisonData = () => {
@@ -421,6 +503,121 @@ const Prediction = () => {
       <h1 className="text-3xl font-bold mb-6">Prediction</h1>
       
       <div className="grid grid-cols-1 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Split Configuration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div className="mb-4">
+                  <label className="text-sm font-medium mb-1 block">Training/Testing Split Ratio</label>
+                  <div className="flex items-center gap-4">
+                    <Slider 
+                      value={[trainTestSplit]} 
+                      onValueChange={(values) => setTrainTestSplit(values[0])}
+                      min={50}
+                      max={95}
+                      step={5}
+                      className="flex-1"
+                    />
+                    <span className="w-16 text-sm font-medium">{trainTestSplit}% / {100-trainTestSplit}%</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {trainingData.length} samples for training, {testingData.length} samples for testing
+                  </p>
+                </div>
+                
+                <div className="mb-4">
+                  <label className="text-sm font-medium mb-1 block">Prediction Starting Point</label>
+                  <Select
+                    value={selectedPredictionPoint !== null ? dataset.data[selectedPredictionPoint]?.date : ''}
+                    onValueChange={handlePredictionPointChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a starting point for prediction" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {dataset.data.map((dataPoint, index) => (
+                        <SelectItem 
+                          key={index} 
+                          value={dataPoint.date}
+                          disabled={index < Math.floor(dataset.data.length * 0.5)} // Disable first half of data
+                        >
+                          {dataPoint.date} {index === Math.floor(dataset.data.length * (trainTestSplit / 100)) ? '(Train/Test Split)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Select a point in the dataset where prediction should start
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-finance-chart-bg rounded-lg p-4 h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsLineChart 
+                    data={prepareDataVisualization()} 
+                    margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      dataKey={dateColumn} 
+                      tick={false}
+                    />
+                    <YAxis />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
+                      formatter={(value: number) => [formatValue(value), targetColumn]}
+                      labelFormatter={(label) => `Date: ${label}`}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey={targetColumn}
+                      stroke="#3B82F6" 
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        // Highlight the prediction point with a different marker
+                        if (payload.isPredictionPoint) {
+                          return (
+                            <svg x={cx - 10} y={cy - 10} width={20} height={20} fill="#EF4444" viewBox="0 0 20 20">
+                              <circle cx="10" cy="10" r="8" />
+                            </svg>
+                          );
+                        }
+                        // No dots for regular points
+                        return null;
+                      }}
+                    />
+                    {/* Line for Training Data */}
+                    <Line 
+                      type="monotone" 
+                      dataKey={(dataPoint) => dataPoint.isTraining ? dataPoint[targetColumn] : null}
+                      stroke="#10B981" 
+                      strokeWidth={3}
+                      dot={false}
+                      name="Training Data"
+                      connectNulls={true}
+                    />
+                    {/* Line for Testing Data */}
+                    <Line 
+                      type="monotone" 
+                      dataKey={(dataPoint) => dataPoint.isTesting ? dataPoint[targetColumn] : null}
+                      stroke="#F97316" 
+                      strokeWidth={3}
+                      dot={false}
+                      name="Testing Data"
+                      connectNulls={true}
+                    />
+                    <Legend />
+                  </RechartsLineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
         <Card>
           <CardHeader>
             <CardTitle>Time Series Prediction</CardTitle>
@@ -527,7 +724,7 @@ const Prediction = () => {
             <div className="flex flex-col sm:flex-row gap-4 mb-6">
               <Button 
                 onClick={generatePredictions}
-                disabled={isGenerating || !targetColumn || !dateColumn}
+                disabled={isGenerating || !targetColumn || !dateColumn || selectedPredictionPoint === null}
               >
                 {isGenerating ? "Generating..." : "Generate Predictions"}
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -536,7 +733,7 @@ const Prediction = () => {
               <Button 
                 variant="outline"
                 onClick={compareAllModels}
-                disabled={isGenerating || !targetColumn || !dateColumn}
+                disabled={isGenerating || !targetColumn || !dateColumn || selectedPredictionPoint === null}
               >
                 Compare & Evaluate Models
                 <BarChart2 className="ml-2 h-4 w-4" />

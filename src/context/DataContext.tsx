@@ -40,11 +40,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       
       // Process based on file type
       if (file.type === 'application/json' || file.name.endsWith('.json')) {
-        // Import the processing function dynamically to reduce initial load time
-        const { processJSONData } = await import('@/utils/dataProcessing');
+        // For now, let's handle JSON files similarly to CSV files
+        // We'll need to implement a proper JSON parser in dataProcessing.ts later
+        const { processCSVData } = await import('@/utils/dataProcessing');
         
-        // Process the JSON data
-        const processed = processJSONData(text, file.name);
+        // Process the JSON as if it were CSV for now
+        const processed = processCSVData(text, file.name);
         
         if (processed.data.length === 0) {
           throw new Error("No valid data rows could be processed. Please check the file format.");
@@ -81,14 +82,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setModelPredictions([]);
       
       toast({
-        title: "Données chargées avec succès",
-        description: `${dataset?.meta.rowCount || 0} lignes et ${dataset?.meta.columnNames.length || 0} colonnes importées.`,
+        title: "Data loaded successfully",
+        description: `${processed?.meta.rowCount || 0} rows and ${processed?.meta.columnNames.length || 0} columns imported.`,
       });
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
-        title: "Erreur lors du chargement des données",
-        description: error instanceof Error ? error.message : "Le fichier n'a pas pu être traité. Veuillez vérifier le format.",
+        title: "Error loading data",
+        description: error instanceof Error ? error.message : "The file could not be processed. Please check the format.",
         variant: "destructive",
       });
     } finally {
