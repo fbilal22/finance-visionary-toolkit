@@ -45,46 +45,54 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const { processCSVData } = await import('@/utils/dataProcessing');
         
         // Process the JSON as if it were CSV for now
-        const processed = processCSVData(text, file.name);
+        const processedData = processCSVData(text, file.name);
         
-        if (processed.data.length === 0) {
+        if (processedData.data.length === 0) {
           throw new Error("No valid data rows could be processed. Please check the file format.");
         }
         
         console.log("Processed JSON data:", {
-          rowCount: processed.data.length,
-          columnNames: processed.meta.columnNames,
-          firstRow: processed.data[0]
+          rowCount: processedData.data.length,
+          columnNames: processedData.meta.columnNames,
+          firstRow: processedData.data[0]
         });
         
-        setDataset(processed);
+        setDataset(processedData);
+        
+        // Clear any existing model predictions when loading new data
+        setModelPredictions([]);
+        
+        toast({
+          title: "Data loaded successfully",
+          description: `${processedData.meta.rowCount || 0} rows and ${processedData.meta.columnNames.length || 0} columns imported.`,
+        });
       } else {
         // Import the processing function dynamically to reduce initial load time
         const { processCSVData } = await import('@/utils/dataProcessing');
         
         // Process the CSV data
-        const processed = processCSVData(text, file.name);
+        const processedData = processCSVData(text, file.name);
         
-        if (processed.data.length === 0) {
+        if (processedData.data.length === 0) {
           throw new Error("No valid data rows could be processed. Please check the file format.");
         }
         
         console.log("Processed CSV data:", {
-          rowCount: processed.data.length,
-          columnNames: processed.meta.columnNames,
-          firstRow: processed.data[0]
+          rowCount: processedData.data.length,
+          columnNames: processedData.meta.columnNames,
+          firstRow: processedData.data[0]
         });
         
-        setDataset(processed);
+        setDataset(processedData);
+        
+        // Clear any existing model predictions when loading new data
+        setModelPredictions([]);
+        
+        toast({
+          title: "Data loaded successfully",
+          description: `${processedData.meta.rowCount || 0} rows and ${processedData.meta.columnNames.length || 0} columns imported.`,
+        });
       }
-      
-      // Clear any existing model predictions when loading new data
-      setModelPredictions([]);
-      
-      toast({
-        title: "Data loaded successfully",
-        description: `${processed?.meta.rowCount || 0} rows and ${processed?.meta.columnNames.length || 0} columns imported.`,
-      });
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
