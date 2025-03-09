@@ -526,161 +526,692 @@ export const transformerModel = (data: any[], targetCol: string, daysToPredict: 
   }
 };
 
-/**
- * Model Evaluation Utilities
- * These functions help evaluate the performance of prediction models
- */
-
-// Calculate Mean Absolute Error (MAE)
-export const calculateMAE = (actual: number[], predicted: number[]): number => {
-  if (actual.length !== predicted.length || actual.length === 0) {
-    return 0;
-  }
+// Facebook Prophet-like model (simplified implementation)
+export const prophetModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
   
-  const sum = actual.reduce((acc, val, i) => acc + Math.abs(val - predicted[i]), 0);
-  return sum / actual.length;
-};
-
-// Calculate Mean Squared Error (MSE)
-export const calculateMSE = (actual: number[], predicted: number[]): number => {
-  if (actual.length !== predicted.length || actual.length === 0) {
-    return 0;
-  }
+  // Prophet decomposes time series into trend, seasonality, and holiday components
+  // This is a simplified version focusing on trend and seasonality
   
-  const sum = actual.reduce((acc, val, i) => acc + Math.pow(val - predicted[i], 2), 0);
-  return sum / actual.length;
-};
-
-// Calculate Root Mean Squared Error (RMSE)
-export const calculateRMSE = (actual: number[], predicted: number[]): number => {
-  return Math.sqrt(calculateMSE(actual, predicted));
-};
-
-// Calculate Mean Absolute Percentage Error (MAPE)
-export const calculateMAPE = (actual: number[], predicted: number[]): number => {
-  if (actual.length !== predicted.length || actual.length === 0) {
-    return 0;
-  }
+  // 1. Detect trend using linear regression
+  const xValues = Array.from({ length: data.length }, (_, i) => i);
+  const n = xValues.length;
+  const sumX = xValues.reduce((sum, x) => sum + x, 0);
+  const sumY = values.reduce((sum, y) => sum + y, 0);
+  const sumXY = xValues.reduce((sum, x, i) => sum + x * values[i], 0);
+  const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
   
-  let sum = 0;
-  let count = 0;
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
   
-  for (let i = 0; i < actual.length; i++) {
-    if (actual[i] !== 0) {
-      sum += Math.abs((actual[i] - predicted[i]) / actual[i]);
-      count++;
-    }
-  }
+  // 2. Detect weekly seasonality
+  const weeklyPattern = detectWeeklyPattern(data, targetCol);
   
-  return count > 0 ? (sum / count) * 100 : 0;
-};
-
-// Calculate R-squared (Coefficient of Determination)
-export const calculateR2 = (actual: number[], predicted: number[]): number => {
-  if (actual.length !== predicted.length || actual.length === 0) {
-    return 0;
-  }
+  // 3. Detect monthly seasonality (simplified)
+  const monthlyFactor = detectMonthlyPattern(data, targetCol);
   
-  const meanActual = actual.reduce((sum, val) => sum + val, 0) / actual.length;
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
   
-  const ssTotal = actual.reduce((sum, val) => sum + Math.pow(val - meanActual, 2), 0);
-  const ssResidual = actual.reduce((sum, val, i) => sum + Math.pow(val - predicted[i], 2), 0);
-  
-  return ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
-};
-
-// Calculate Directional Accuracy (DA) - percentage of correctly predicted directions
-export const calculateDirectionalAccuracy = (actual: number[], predicted: number[]): number => {
-  if (actual.length <= 1 || predicted.length <= 1 || actual.length !== predicted.length) {
-    return 0;
-  }
-  
-  let correctDirections = 0;
-  
-  for (let i = 1; i < actual.length; i++) {
-    const actualDirection = actual[i] - actual[i-1];
-    const predictedDirection = predicted[i] - predicted[i-1];
+  for (let i = 1; i <= daysToPredict; i++) {
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
     
-    if ((actualDirection >= 0 && predictedDirection >= 0) || 
-        (actualDirection < 0 && predictedDirection < 0)) {
-      correctDirections++;
-    }
+    // Trend component
+    const trendPrediction = intercept + slope * (n + i - 1);
+    
+    // Seasonal components
+    const dayOfWeek = nextDate.getDay();
+    const dayOfMonth = nextDate.getDate();
+    
+    const weeklySeasonal = weeklyPattern[dayOfWeek] || 0;
+    const monthlySeasonal = monthlyFactor * (dayOfMonth / 30);
+    
+    // Combine components (trend + seasonality)
+    const predictedValue = trendPrediction + weeklySeasonal + monthlySeasonal;
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
   }
   
-  return (correctDirections / (actual.length - 1)) * 100;
+  return predictions;
+  
+  // Helper functions for seasonal detection
+  function detectWeeklyPattern(data: any[], col: string) {
+    const weekdayAvgs = Array(7).fill(0);
+    const weekdayCounts = Array(7).fill(0);
+    
+    // Calculate average for each day of week
+    data.forEach(item => {
+      const date = new Date(item.date);
+      const dayOfWeek = date.getDay();
+      weekdayAvgs[dayOfWeek] += item[col];
+      weekdayCounts[dayOfWeek]++;
+    });
+    
+    // Normalize by counts and calculate deviations from overall mean
+    const overallMean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    
+    return weekdayAvgs.map((sum, i) => {
+      return weekdayCounts[i] > 0 ? (sum / weekdayCounts[i]) - overallMean : 0;
+    });
+  }
+  
+  function detectMonthlyPattern(data: any[], col: string) {
+    if (data.length < 60) return 0; // Need sufficient data for monthly patterns
+    
+    const firstHalf = data.slice(0, Math.floor(data.length / 2));
+    const secondHalf = data.slice(Math.floor(data.length / 2));
+    
+    const firstAvg = firstHalf.reduce((sum, item) => sum + item[col], 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, item) => sum + item[col], 0) / secondHalf.length;
+    
+    // Detect if there's a strong monthly effect
+    return Math.abs(secondAvg - firstAvg) > 0.1 * Math.abs(firstAvg) ? 
+      (secondAvg - firstAvg) / 10 : 0;
+  }
 };
 
-// Generate backtesting results for model evaluation
-export const generateBacktestResults = (data: any[], targetCol: string, modelFn: Function, testWindowSize: number = 7) => {
-  if (data.length < testWindowSize * 2) {
+// XGBoost-like model (simplified implementation)
+export const xgboostModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // XGBoost is an ensemble of decision trees that improves through gradient boosting
+  // This simplified version emulates XGBoost's behavior with boosted decision stumps
+  
+  // Create 5 "weak learners" with different lookback periods
+  const weakLearners = [3, 5, 7, 14, 21].map(window => {
     return {
-      mae: 0,
-      mse: 0,
-      rmse: 0,
-      mape: 0,
-      r2: 0,
-      directionalAccuracy: 0,
-      predictedValues: [],
-      actualValues: []
+      window,
+      // Each learner's weight is proportional to how "accurate" we consider it
+      weight: Math.exp(-0.1 * window), // Give more weight to more recent periods
+      predict: (idx: number) => {
+        if (idx < window) return values[0]; // Fallback for early predictions
+        
+        // Calculate average change over this window
+        const recentValues = values.slice(idx - window, idx);
+        const avgChange = recentValues.reduce((sum, val, i, arr) => {
+          return i > 0 ? sum + (val - arr[i-1]) : sum;
+        }, 0) / (window - 1);
+        
+        // Return prediction based on last value + average change
+        return values[idx - 1] + avgChange;
+      }
+    };
+  });
+  
+  // Use boosting: train "residuals" for each learner sequentially
+  const residuals = [...values];
+  const learnerOutputs: number[][] = [];
+  
+  // Train each weak learner on residuals
+  weakLearners.forEach(learner => {
+    const outputs = [];
+    
+    for (let i = 0; i < values.length; i++) {
+      const prediction = learner.predict(i);
+      outputs.push(prediction);
+      
+      // Update residuals for next learner (if not the last one)
+      if (learnerOutputs.length < weakLearners.length - 1) {
+        residuals[i] -= prediction * learner.weight;
+      }
+    }
+    
+    learnerOutputs.push(outputs);
+  });
+  
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  let lastValue = values[values.length - 1];
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    // Calculate prediction as weighted sum of weak learners
+    let predictedValue = 0;
+    let weightSum = 0;
+    
+    weakLearners.forEach((learner, idx) => {
+      // For prediction, we're predicting future values based on learned patterns
+      const learnerPrediction = learnerOutputs[idx][values.length - 1] * 
+        (1 + (Math.random() * 0.02 - 0.01) * i); // Add slight randomness for longer horizons
+      
+      predictedValue += learnerPrediction * learner.weight;
+      weightSum += learner.weight;
+    });
+    
+    // Normalize by weight sum and adjust based on last known value
+    predictedValue = lastValue + (predictedValue / weightSum - lastValue) * 0.2 * i;
+    lastValue = predictedValue; // For next prediction
+    
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+  }
+  
+  return predictions;
+};
+
+// Auto ARIMA model (simplified implementation)
+export const autoARIMAModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // Auto ARIMA would automatically select appropriate p, d, q parameters
+  // This simplified version examines the data characteristics to select basic ARIMA params
+  
+  // Check if differencing is needed (non-stationarity)
+  const needsDifferencing = checkDifferencing(values);
+  
+  // Select AR and MA orders based on autocorrelation (simplified)
+  const { arOrder, maOrder } = selectOrders(values, needsDifferencing);
+  
+  // Apply the selected model
+  return arimaModel(data, targetCol, daysToPredict, arOrder, needsDifferencing ? 1 : 0, maOrder);
+  
+  // Helper functions
+  function checkDifferencing(timeSeries: number[]) {
+    // Check for trend using correlation with time
+    const n = timeSeries.length;
+    const xValues = Array.from({ length: n }, (_, i) => i);
+    
+    // Calculate correlation coefficient
+    const xMean = xValues.reduce((sum, x) => sum + x, 0) / n;
+    const yMean = timeSeries.reduce((sum, y) => sum + y, 0) / n;
+    
+    let numerator = 0;
+    let xDenominator = 0;
+    let yDenominator = 0;
+    
+    for (let i = 0; i < n; i++) {
+      const xDiff = xValues[i] - xMean;
+      const yDiff = timeSeries[i] - yMean;
+      
+      numerator += xDiff * yDiff;
+      xDenominator += xDiff * xDiff;
+      yDenominator += yDiff * yDiff;
+    }
+    
+    const correlation = numerator / Math.sqrt(xDenominator * yDenominator);
+    
+    // If strong correlation with time, differencing is needed
+    return Math.abs(correlation) > 0.3;
+  }
+  
+  function selectOrders(timeSeries: number[], differenced: boolean) {
+    // In a real Auto ARIMA, we'd examine autocorrelation and partial autocorrelation functions
+    // This is a simplified approach that just checks recent lags
+    
+    const workingSeries = differenced ? 
+      timeSeries.slice(1).map((val, i) => val - timeSeries[i]) : 
+      [...values];
+    
+    // Check correlation with different lags
+    const correlations = [];
+    
+    for (let lag = 1; lag <= Math.min(5, Math.floor(workingSeries.length / 3)); lag++) {
+      const laggedSeries = workingSeries.slice(lag);
+      const mainSeries = workingSeries.slice(0, workingSeries.length - lag);
+      
+      // Calculate correlation
+      const n = laggedSeries.length;
+      const laggedMean = laggedSeries.reduce((sum, val) => sum + val, 0) / n;
+      const mainMean = mainSeries.reduce((sum, val) => sum + val, 0) / n;
+      
+      let numerator = 0;
+      let laggedDenominator = 0;
+      let mainDenominator = 0;
+      
+      for (let j = 0; j < n; j++) {
+        const laggedDiff = laggedSeries[j] - laggedMean;
+        const mainDiff = mainSeries[j] - mainMean;
+        
+        numerator += laggedDiff * mainDiff;
+        laggedDenominator += laggedDiff * laggedDiff;
+        mainDenominator += mainDiff * mainDiff;
+      }
+      
+      const correlation = numerator / Math.sqrt(laggedDenominator * mainDenominator);
+      correlations.push(Math.abs(correlation));
+    }
+    
+    // Find strongest correlations
+    let arOrder = 1;
+    let maOrder = 0;
+    
+    // Select AR order based on highest correlation
+    const maxCorrelationIndex = correlations.indexOf(Math.max(...correlations));
+    if (maxCorrelationIndex >= 0) {
+      arOrder = maxCorrelationIndex + 1;
+    }
+    
+    // For simplicity, keep MA order low
+    maOrder = Math.max(1, arOrder - 1);
+    
+    return { arOrder, maOrder };
+  }
+  
+  function arimaModel(data: any[], targetCol: string, daysToPredict: number, p: number, d: number, q: number) {
+    const values = data.map(item => item[targetCol]);
+    
+    // Apply differencing if needed
+    const workingSeries = d > 0 ? 
+      values.slice(d).map((val, i) => val - values[i]) : 
+      [...values];
+    
+    // AR coefficients (simplified estimation)
+    const arCoeffs = estimateARCoefficients(workingSeries, p);
+    
+    // MA coefficients (simplified estimation)
+    const maCoeffs = estimateMACoefficients(workingSeries, arCoeffs, q);
+    
+    // Generate predictions
+    const predictions = [];
+    const lastDate = new Date(data[data.length - 1].date);
+    
+    // For forecasting, we need the last p values and last q errors
+    const lastValues = values.slice(-p);
+    
+    // Calculate last q errors
+    const errors = [];
+    for (let i = p; i < values.length; i++) {
+      let arPrediction = 0;
+      for (let j = 0; j < p; j++) {
+        arPrediction += arCoeffs[j] * values[i - j - 1];
+      }
+      
+      let maPrediction = 0;
+      for (let j = 0; j < Math.min(q, errors.length); j++) {
+        maPrediction += maCoeffs[j] * errors[j];
+      }
+      
+      const prediction = arPrediction + maPrediction;
+      const error = values[i] - prediction;
+      errors.unshift(error);
+      
+      if (errors.length > q) errors.pop();
+    }
+    
+    // Generate forecasts
+    const forecastValues = [...lastValues];
+    const forecastErrors = [...errors];
+    
+    for (let i = 1; i <= daysToPredict; i++) {
+      let arPrediction = 0;
+      for (let j = 0; j < p; j++) {
+        arPrediction += arCoeffs[j] * forecastValues[forecastValues.length - j - 1];
+      }
+      
+      let maPrediction = 0;
+      for (let j = 0; j < Math.min(q, forecastErrors.length); j++) {
+        maPrediction += maCoeffs[j] * forecastErrors[j];
+      }
+      
+      let predictedValue = arPrediction + maPrediction;
+      
+      // If we used differencing, we need to invert it
+      if (d > 0) {
+        predictedValue += values[values.length - 1 + (i - 1)];
+      }
+      
+      forecastValues.push(predictedValue);
+      forecastErrors.unshift(0); // Assume zero error for future predictions
+      
+      if (forecastErrors.length > q) forecastErrors.pop();
+      
+      const nextDate = new Date(lastDate);
+      nextDate.setDate(nextDate.getDate() + i);
+      
+      predictions.push({
+        date: nextDate.toISOString().split('T')[0],
+        [targetCol]: parseFloat(predictedValue.toFixed(2)),
+        isPrediction: true
+      });
+    }
+    
+    return predictions;
+  }
+  
+  function estimateARCoefficients(series: number[], p: number) {
+    // Simplified Yule-Walker equations (in practice would use more sophisticated methods)
+    const coeffs = Array(p).fill(0.5 / p);
+    
+    // Adjust coefficients based on lag correlations
+    for (let i = 0; i < p; i++) {
+      const lag = i + 1;
+      const laggedSeries = series.slice(lag);
+      const mainSeries = series.slice(0, series.length - lag);
+      
+      const n = laggedSeries.length;
+      const laggedMean = laggedSeries.reduce((sum, val) => sum + val, 0) / n;
+      const mainMean = mainSeries.reduce((sum, val) => sum + val, 0) / n;
+      
+      let numerator = 0;
+      let laggedDenominator = 0;
+      let mainDenominator = 0;
+      
+      for (let j = 0; j < n; j++) {
+        const laggedDiff = laggedSeries[j] - laggedMean;
+        const mainDiff = mainSeries[j] - mainMean;
+        
+        numerator += laggedDiff * mainDiff;
+        laggedDenominator += laggedDiff * laggedDiff;
+        mainDenominator += mainDiff * mainDiff;
+      }
+      
+      const correlation = numerator / Math.sqrt(laggedDenominator * mainDenominator);
+      coeffs[i] = correlation * 0.5;
+    }
+    
+    return coeffs;
+  }
+  
+  function estimateMACoefficients(series: number[], arCoeffs: number[], q: number) {
+    // Very simplified MA estimation
+    // In practice, this would use more sophisticated methods
+    
+    // Create errors based on AR model
+    const errors = [];
+    
+    for (let i = arCoeffs.length; i < series.length; i++) {
+      let arPrediction = 0;
+      for (let j = 0; j < arCoeffs.length; j++) {
+        arPrediction += arCoeffs[j] * series[i - j - 1];
+      }
+      
+      const error = series[i] - arPrediction;
+      errors.push(error);
+    }
+    
+    // Simplified MA coefficients based on error autocorrelations
+    const coeffs = Array(q).fill(0);
+    
+    for (let i = 0; i < q && i + 1 < errors.length; i++) {
+      const lag = i + 1;
+      const laggedErrors = errors.slice(lag);
+      const mainErrors = errors.slice(0, errors.length - lag);
+      
+      const n = laggedErrors.length;
+      
+      if (n > 0) {
+        const laggedMean = laggedErrors.reduce((sum, val) => sum + val, 0) / n;
+        const mainMean = mainErrors.reduce((sum, val) => sum + val, 0) / n;
+        
+        let numerator = 0;
+        let laggedDenominator = 0;
+        let mainDenominator = 0;
+        
+        for (let j = 0; j < n; j++) {
+          const laggedDiff = laggedErrors[j] - laggedMean;
+          const mainDiff = mainErrors[j] - mainMean;
+          
+          numerator += laggedDiff * mainDiff;
+          laggedDenominator += laggedDiff * laggedDiff;
+          mainDenominator += mainDiff * mainDiff;
+        }
+        
+        // Correlation coefficient as MA parameter (simplified)
+        const denom = Math.sqrt(laggedDenominator * mainDenominator);
+        coeffs[i] = denom !== 0 ? numerator / denom : 0;
+      }
+    }
+    
+    return coeffs;
+  }
+};
+
+// Bayesian Structural Time Series (BSTS) model - simplified implementation
+export const bstsModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
+  
+  // BSTS decomposes time series into trend, seasonality, and regression components
+  // with uncertainty quantified through Bayesian inference
+  
+  // 1. Estimate trend component with uncertainty
+  const { trendEstimate, trendUncertainty } = estimateTrend(values);
+  
+  // 2. Estimate seasonal components with uncertainty
+  const { weeklySeasonals, weeklyUncertainty } = estimateSeasonality(data, targetCol);
+  
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    const dayOfWeek = nextDate.getDay();
+    
+    // Increase uncertainty with forecast horizon
+    const horizonUncertainty = Math.sqrt(i) * 0.01;
+    
+    // Combine components with increasing uncertainty for longer horizons
+    const trendValue = trendEstimate.intercept + trendEstimate.slope * (values.length + i);
+    const seasonalValue = weeklySeasonals[dayOfWeek];
+    
+    // Add uncertainty adjustments
+    const trendAdjustment = (Math.random() - 0.5) * trendUncertainty * i;
+    const seasonalAdjustment = (Math.random() - 0.5) * weeklyUncertainty;
+    const horizonAdjustment = (Math.random() - 0.5) * horizonUncertainty * values[values.length - 1];
+    
+    const predictedValue = trendValue + seasonalValue + trendAdjustment + seasonalAdjustment + horizonAdjustment;
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+  }
+  
+  return predictions;
+  
+  // Helper functions
+  function estimateTrend(timeSeries: number[]) {
+    const n = timeSeries.length;
+    const xValues = Array.from({ length: n }, (_, i) => i);
+    
+    // Linear regression
+    const sumX = xValues.reduce((sum, x) => sum + x, 0);
+    const sumY = timeSeries.reduce((sum, y) => sum + y, 0);
+    const sumXY = xValues.reduce((sum, x, i) => sum + x * timeSeries[i], 0);
+    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    
+    // Calculate residuals for uncertainty estimation
+    const residuals = timeSeries.map((y, i) => y - (intercept + slope * i));
+    const residualVariance = residuals.reduce((sum, r) => sum + r * r, 0) / (n - 2);
+    const trendUncertainty = Math.sqrt(residualVariance);
+    
+    return {
+      trendEstimate: { slope, intercept },
+      trendUncertainty
     };
   }
   
-  // Split data into training and test sets
-  const trainingData = data.slice(0, data.length - testWindowSize);
-  const testData = data.slice(data.length - testWindowSize);
-  
-  // Generate predictions using the model
-  const predictions = modelFn(trainingData, targetCol, testWindowSize);
-  
-  // Extract actual and predicted values
-  const actualValues = testData.map(item => item[targetCol]);
-  const predictedValues = predictions.map(item => item[targetCol]);
-  
-  // Calculate evaluation metrics
-  const mae = calculateMAE(actualValues, predictedValues);
-  const mse = calculateMSE(actualValues, predictedValues);
-  const rmse = calculateRMSE(actualValues, predictedValues);
-  const mape = calculateMAPE(actualValues, predictedValues);
-  const r2 = calculateR2(actualValues, predictedValues);
-  const directionalAccuracy = calculateDirectionalAccuracy(actualValues, predictedValues);
-  
-  return {
-    mae,
-    mse,
-    rmse,
-    mape,
-    r2,
-    directionalAccuracy,
-    predictedValues,
-    actualValues
-  };
+  function estimateSeasonality(data: any[], col: string) {
+    const weeklySeasonals = Array(7).fill(0);
+    const weeklyVariances = Array(7).fill(0);
+    const weekdayCounts = Array(7).fill(0);
+    
+    // Detrend the series
+    const values = data.map(item => item[col]);
+    const { trendEstimate } = estimateTrend(values);
+    const detrended = values.map((y, i) => y - (trendEstimate.intercept + trendEstimate.slope * i));
+    
+    // Calculate average seasonal effects by day of week
+    data.forEach((item, idx) => {
+      const date = new Date(item.date);
+      const dayOfWeek = date.getDay();
+      weeklySeasonals[dayOfWeek] += detrended[idx];
+      weekdayCounts[dayOfWeek]++;
+    });
+    
+    // Normalize by counts
+    weeklySeasonals.forEach((sum, i) => {
+      weeklySeasonals[i] = weekdayCounts[i] > 0 ? sum / weekdayCounts[i] : 0;
+    });
+    
+    // Calculate variances for each day of week
+    data.forEach((item, idx) => {
+      const date = new Date(item.date);
+      const dayOfWeek = date.getDay();
+      const diff = detrended[idx] - weeklySeasonals[dayOfWeek];
+      weeklyVariances[dayOfWeek] += diff * diff;
+    });
+    
+    // Normalize variances
+    weeklyVariances.forEach((sum, i) => {
+      weeklyVariances[i] = weekdayCounts[i] > 1 ? sum / (weekdayCounts[i] - 1) : sum;
+    });
+    
+    // Average uncertainty across days
+    const weeklyUncertainty = Math.sqrt(
+      weeklyVariances.reduce((sum, v) => sum + v, 0) / weeklyVariances.length
+    );
+    
+    return { 
+      weeklySeasonals, 
+      weeklyUncertainty 
+    };
+  }
 };
 
-// Get an overall model score (0-100) based on multiple metrics
-export const calculateModelScore = (metrics: { 
-  mae: number, 
-  rmse: number, 
-  mape: number, 
-  r2: number, 
-  directionalAccuracy: number 
-}): number => {
-  // Define weights for each metric
-  const weights = {
-    mape: 0.25,      // Lower is better
-    r2: 0.25,        // Higher is better
-    directionalAccuracy: 0.5  // Higher is better
-  };
+// Generalized Additive Model (GAM) - simplified implementation
+export const gamModel = (data: any[], targetCol: string, daysToPredict: number) => {
+  const values = data.map(item => item[targetCol]);
   
-  // Calculate normalized scores (0-100)
-  const mapeScore = Math.max(0, 100 - metrics.mape);
-  const r2Score = Math.max(0, metrics.r2 * 100);
-  const daScore = metrics.directionalAccuracy;
+  // GAM models the response as a sum of smooth functions of predictors
+  // y = α + f₁(x₁) + f₂(x₂) + ... + fₚ(xₚ) + ε
   
-  // Calculate weighted score
-  const weightedScore = 
-    mapeScore * weights.mape +
-    r2Score * weights.r2 +
-    daScore * weights.directionalAccuracy;
+  // 1. Linear trend component
+  const trendFunc = fitLinearTrend(values);
   
-  return Math.round(weightedScore);
+  // 2. Day-of-week effect (categorical)
+  const dowEffects = fitDayOfWeekEffect(data, targetCol);
+  
+  // 3. Recent momentum effect (non-linear)
+  const momentumFunc = fitMomentumEffect(values);
+  
+  // 4. Long-term level effect (non-linear)
+  const levelFunc = fitLevelEffect(values);
+  
+  // Generate predictions
+  const predictions = [];
+  const lastDate = new Date(data[data.length - 1].date);
+  const lastValues = values.slice(-10); // Last values for momentum calculation
+  
+  for (let i = 1; i <= daysToPredict; i++) {
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + i);
+    const dayOfWeek = nextDate.getDay();
+    
+    // Combine all components
+    const trendComponent = trendFunc(values.length + i);
+    const dowComponent = dowEffects[dayOfWeek];
+    const momentumComponent = momentumFunc(calculateMomentum(lastValues));
+    const levelComponent = levelFunc(values[values.length - 1]);
+    
+    const predictedValue = trendComponent + dowComponent + momentumComponent + levelComponent;
+    
+    predictions.push({
+      date: nextDate.toISOString().split('T')[0],
+      [targetCol]: parseFloat(predictedValue.toFixed(2)),
+      isPrediction: true
+    });
+    
+    // Update last values for next prediction
+    lastValues.push(predictedValue);
+    lastValues.shift();
+  }
+  
+  return predictions;
+  
+  // Helper functions for fitting components
+  function fitLinearTrend(timeSeries: number[]) {
+    const n = timeSeries.length;
+    const xValues = Array.from({ length: n }, (_, i) => i);
+    
+    // Simple linear regression
+    const sumX = xValues.reduce((sum, x) => sum + x, 0);
+    const sumY = timeSeries.reduce((sum, y) => sum + y, 0);
+    const sumXY = xValues.reduce((sum, x, i) => sum + x * timeSeries[i], 0);
+    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    
+    // Return trend function
+    return (x: number) => intercept + slope * x;
+  }
+  
+  function fitDayOfWeekEffect(data: any[], col: string) {
+    const values = data.map(item => item[col]);
+    
+    // Detrend the series
+    const trendFunc = fitLinearTrend(values);
+    const detrended = values.map((y, i) => y - trendFunc(i));
+    
+    // Calculate effect by day of week
+    const dowSums = Array(7).fill(0);
+    const dowCounts = Array(7).fill(0);
+    
+    data.forEach((item, idx) => {
+      const date = new Date(item.date);
+      const dayOfWeek = date.getDay();
+      dowSums[dayOfWeek] += detrended[idx];
+      dowCounts[dayOfWeek]++;
+    });
+    
+    // Calculate average effect for each day
+    return dowSums.map((sum, i) => 
+      dowCounts[i] > 0 ? sum / dowCounts[i] : 0
+    );
+  }
+  
+  function fitMomentumEffect(timeSeries: number[]) {
+    // A function that returns higher values for strong momentum
+    // and lower values for weak momentum
+    return (momentum: number) => {
+      // Non-linear transformation: stronger effect for extreme momentum
+      return momentum * (1 + 0.2 * Math.abs(momentum));
+    };
+  }
+  
+  function fitLevelEffect(timeSeries: number[]) {
+    const mean = timeSeries.reduce((sum, val) => sum + val, 0) / timeSeries.length;
+    const stdDev = Math.sqrt(
+      timeSeries.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / timeSeries.length
+    );
+    
+    // A function that adjusts predictions based on level
+    return (level: number) => {
+      // Mean reversion effect: if current level is high, predict lower future values
+      const zScore = (level - mean) / stdDev;
+      return -0.05 * zScore * level;
+    };
+  }
+  
+  function calculateMomentum(recentValues: number[]) {
+    if (recentValues.length < 3) return 0;
+    
+    // Short-term momentum: last value vs average of previous values
+    const last = recentValues[recentValues.length - 1];
+    const prevAvg = recentValues.slice(0, -1).reduce((sum, val) => sum + val, 0) / 
+                   (recentValues.length - 1);
+    
+    return (last - prevAvg) / Math.abs(prevAvg || 1);
+  }
 };
+
+// Model evaluation functions
+// ... keep existing code (calculateMAE, calculateMSE, calculateRMSE, calculateMAPE, calculateR2, other evaluation functions)

@@ -23,6 +23,11 @@ import {
   svrModel,
   lstmModel,
   transformerModel,
+  prophetModel,
+  xgboostModel,
+  autoARIMAModel,
+  bstsModel,
+  gamModel,
   generateBacktestResults,
   calculateModelScore
 } from '@/utils/predictionModels';
@@ -38,7 +43,12 @@ type PredictionMethod =
   | 'randomForest'
   | 'svr'
   | 'lstm'
-  | 'transformer';
+  | 'transformer'
+  | 'prophet'
+  | 'xgboost'
+  | 'autoARIMA'
+  | 'bsts'
+  | 'gam';
 
 const predictionMethods = [
   { id: 'linear', name: 'Linear Regression', description: 'Fits a straight line to historical data.', category: 'traditional' },
@@ -46,10 +56,15 @@ const predictionMethods = [
   { id: 'exponential', name: 'Exponential Smoothing', description: 'Weights recent observations more heavily than older ones.', category: 'traditional' },
   { id: 'doubleExponential', name: 'Double Exponential', description: 'Handles data with trends using two smoothing equations.', category: 'traditional' },
   { id: 'arima', name: 'ARIMA-like', description: 'Simplified version of Auto-Regressive Integrated Moving Average.', category: 'traditional' },
+  { id: 'autoARIMA', name: 'Auto ARIMA', description: 'Automatically selects optimal ARIMA parameters based on data patterns.', category: 'traditional' },
   { id: 'seasonal', name: 'Seasonal Naive', description: 'Assumes future values follow seasonal patterns from the past.', category: 'traditional' },
   { id: 'meanReversion', name: 'Mean Reversion', description: 'Assumes prices tend to return to their historical average.', category: 'traditional' },
   { id: 'randomForest', name: 'Random Forest', description: 'Ensemble learning method that builds multiple decision trees for prediction.', category: 'ml' },
   { id: 'svr', name: 'Support Vector Regression', description: 'Uses support vectors to find an optimal regression line.', category: 'ml' },
+  { id: 'xgboost', name: 'XGBoost', description: 'Gradient boosting algorithm that combines multiple weak models into a strong predictor.', category: 'ml' },
+  { id: 'prophet', name: 'Prophet', description: 'Decomposable model to handle seasonality, holidays, and trend changes.', category: 'ml' },
+  { id: 'gam', name: 'GAM', description: 'Generalized Additive Model that combines multiple non-linear effects.', category: 'ml' },
+  { id: 'bsts', name: 'BSTS', description: 'Bayesian Structural Time Series with uncertainty quantification.', category: 'ml' },
   { id: 'lstm', name: 'LSTM Neural Network', description: 'Deep learning model that captures long-term dependencies in time series.', category: 'dl' },
   { id: 'transformer', name: 'Transformer Network', description: 'Advanced deep learning model using attention mechanisms.', category: 'dl' },
 ];
@@ -115,6 +130,9 @@ const Prediction = () => {
         case 'arima':
           predictedData = arimaLikeModel(data, targetColumn, predictionDays);
           break;
+        case 'autoARIMA':
+          predictedData = autoARIMAModel(data, targetColumn, predictionDays);
+          break;
         case 'seasonal':
           predictedData = seasonalNaiveModel(data, targetColumn, predictionDays);
           break;
@@ -132,6 +150,18 @@ const Prediction = () => {
           break;
         case 'transformer':
           predictedData = transformerModel(data, targetColumn, predictionDays);
+          break;
+        case 'prophet':
+          predictedData = prophetModel(data, targetColumn, predictionDays);
+          break;
+        case 'xgboost':
+          predictedData = xgboostModel(data, targetColumn, predictionDays);
+          break;
+        case 'bsts':
+          predictedData = bstsModel(data, targetColumn, predictionDays);
+          break;
+        case 'gam':
+          predictedData = gamModel(data, targetColumn, predictionDays);
           break;
       }
       
@@ -190,6 +220,9 @@ const Prediction = () => {
           case 'arima':
             modelFn = arimaLikeModel;
             break;
+          case 'autoARIMA':
+            modelFn = autoARIMAModel;
+            break; 
           case 'seasonal':
             modelFn = seasonalNaiveModel;
             break;
@@ -207,6 +240,18 @@ const Prediction = () => {
             break;
           case 'transformer':
             modelFn = transformerModel;
+            break;
+          case 'prophet':
+            modelFn = prophetModel;
+            break;
+          case 'xgboost':
+            modelFn = xgboostModel;
+            break;
+          case 'bsts':
+            modelFn = bstsModel;
+            break;
+          case 'gam':
+            modelFn = gamModel;
             break;
         }
         
@@ -871,4 +916,3 @@ const Prediction = () => {
 };
 
 export default Prediction;
-

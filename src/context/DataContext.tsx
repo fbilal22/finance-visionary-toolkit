@@ -3,12 +3,24 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { ProcessedDataset, generateSampleData } from '@/utils/dataProcessing';
 import { toast } from '@/components/ui/use-toast';
 
+interface ModelPrediction {
+  modelId: string;
+  targetColumn: string;
+  predictionDays: number;
+  data: any[];
+  createdAt: number;
+}
+
 interface DataContextType {
   dataset: ProcessedDataset | null;
   isLoading: boolean;
   loadDataset: (file: File) => Promise<void>;
   loadSampleData: () => void;
   clearData: () => void;
+  modelPredictions: ModelPrediction[];
+  addModelPrediction: (modelId: string, targetColumn: string, predictionDays: number, data: any[]) => void;
+  clearModelPredictions: () => void;
+  getModelPrediction: (modelId: string, targetColumn: string, predictionDays: number) => ModelPrediction | undefined;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -16,6 +28,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [dataset, setDataset] = useState<ProcessedDataset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [modelPredictions, setModelPredictions] = useState<ModelPrediction[]>([]);
 
   const loadDataset = async (file: File) => {
     try {
@@ -43,6 +56,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       
       setDataset(processed);
       
+      // Clear any existing model predictions when loading new data
+      setModelPredictions([]);
+      
       toast({
         title: "Data Loaded Successfully",
         description: `${processed.meta.rowCount} rows and ${processed.meta.columnNames.length} columns imported.`,
@@ -65,6 +81,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const sampleData = generateSampleData();
       setDataset(sampleData);
       
+      // Clear any existing model predictions when loading sample data
+      setModelPredictions([]);
+      
       toast({
         title: "Sample Data Loaded",
         description: "Sample financial data has been loaded for demonstration.",
@@ -83,10 +102,50 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const clearData = () => {
     setDataset(null);
+    setModelPredictions([]);
     toast({
       title: "Data Cleared",
       description: "All data has been cleared from the application.",
     });
+  };
+
+  // Add a new model prediction to the cache
+  const addModelPrediction = (modelId: string, targetColumn: string, predictionDays: number, data: any[]) => {
+    // Remove any existing prediction with the same parameters
+    const filteredPredictions = modelPredictions.filter(
+      p => !(p.modelId === modelId && p.targetColumn === targetColumn && p.predictionDays === predictionDays)
+    );
+    
+    // Add the new prediction
+    setModelPredictions([
+      ...filteredPredictions,
+      {
+        modelId,
+        targetColumn,
+        predictionDays,
+        data,
+        createdAt: Date.now()
+      }
+    ]);
+    
+    // If we have more than 20 predictions, remove the oldest ones
+    if (filteredPredictions.length >= 20) {
+      setModelPredictions(prev => 
+        prev.sort((a, b) => b.createdAt - a.createdAt).slice(0, 20)
+      );
+    }
+  };
+
+  // Get a model prediction from the cache if it exists
+  const getModelPrediction = (modelId: string, targetColumn: string, predictionDays: number) => {
+    return modelPredictions.find(
+      p => p.modelId === modelId && p.targetColumn === targetColumn && p.predictionDays === predictionDays
+    );
+  };
+
+  // Clear all model predictions
+  const clearModelPredictions = () => {
+    setModelPredictions([]);
   };
 
   return (
@@ -97,6 +156,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         loadDataset,
         loadSampleData,
         clearData,
+        modelPredictions,
+        addModelPrediction,
+        clearModelPredictions,
+        getModelPrediction
       }}
     >
       {children}
