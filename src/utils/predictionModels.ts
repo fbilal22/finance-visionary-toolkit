@@ -1,3 +1,4 @@
+
 /**
  * Financial Time Series Prediction Models
  * This file contains various prediction models for financial time series data.
@@ -1214,4 +1215,180 @@ export const gamModel = (data: any[], targetCol: string, daysToPredict: number) 
 };
 
 // Model evaluation functions
-// ... keep existing code (calculateMAE, calculateMSE, calculateRMSE, calculateMAPE, calculateR2, other evaluation functions)
+
+// Calculate Mean Absolute Error
+export const calculateMAE = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) return 0;
+  
+  const sum = actual.reduce((sum, val, i) => sum + Math.abs(val - predicted[i]), 0);
+  return sum / actual.length;
+};
+
+// Calculate Mean Squared Error
+export const calculateMSE = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) return 0;
+  
+  const sum = actual.reduce((sum, val, i) => sum + Math.pow(val - predicted[i], 2), 0);
+  return sum / actual.length;
+};
+
+// Calculate Root Mean Squared Error
+export const calculateRMSE = (actual: number[], predicted: number[]): number => {
+  return Math.sqrt(calculateMSE(actual, predicted));
+};
+
+// Calculate Mean Absolute Percentage Error
+export const calculateMAPE = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) return 0;
+  
+  const percentageErrors = actual.map((val, i) => {
+    if (val === 0) return 0; // Avoid division by zero
+    return Math.abs((val - predicted[i]) / val) * 100;
+  });
+  
+  return percentageErrors.reduce((sum, val) => sum + val, 0) / percentageErrors.length;
+};
+
+// Calculate R-squared
+export const calculateR2 = (actual: number[], predicted: number[]): number => {
+  if (actual.length !== predicted.length || actual.length === 0) return 0;
+  
+  const mean = actual.reduce((sum, val) => sum + val, 0) / actual.length;
+  
+  const totalSumSquares = actual.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
+  const residualSumSquares = actual.reduce((sum, val, i) => sum + Math.pow(val - predicted[i], 2), 0);
+  
+  if (totalSumSquares === 0) return 0; // Avoid division by zero
+  
+  const r2 = 1 - (residualSumSquares / totalSumSquares);
+  
+  // R² can be negative if the model performs worse than a horizontal line
+  return Math.max(0, r2);
+};
+
+// Calculate directional accuracy
+export const calculateDirectionalAccuracy = (actual: number[], predicted: number[]): number => {
+  if (actual.length < 2 || predicted.length < 2) return 0;
+  
+  let correctDirection = 0;
+  
+  for (let i = 1; i < actual.length; i++) {
+    const actualDirection = Math.sign(actual[i] - actual[i-1]);
+    const predictedDirection = Math.sign(predicted[i] - predicted[i-1]);
+    
+    if (actualDirection === predictedDirection) {
+      correctDirection++;
+    }
+  }
+  
+  return (correctDirection / (actual.length - 1)) * 100;
+};
+
+// Generate backtest results for model evaluation
+export const generateBacktestResults = (
+  data: any[], 
+  targetCol: string, 
+  modelFn: (data: any[], targetCol: string, daysToPredict: number) => any[],
+  windowSize: number = 7
+): {
+  mae: number;
+  rmse: number;
+  mape: number;
+  r2: number;
+  directionalAccuracy: number;
+} => {
+  if (data.length < windowSize * 2) {
+    return {
+      mae: 0,
+      rmse: 0,
+      mape: 0,
+      r2: 0,
+      directionalAccuracy: 0
+    };
+  }
+  
+  const testWindows = Math.min(10, Math.floor(data.length / windowSize));
+  const results = [];
+  
+  // Run multiple backtests at different points in time
+  for (let i = 0; i < testWindows; i++) {
+    const endIdx = data.length - i * windowSize;
+    const startIdx = Math.max(0, endIdx - 30); // Use last 30 data points for prediction
+    
+    if (endIdx - startIdx < 10) continue; // Skip if not enough data
+    
+    const trainingData = data.slice(startIdx, endIdx);
+    const testData = data.slice(endIdx, Math.min(data.length, endIdx + windowSize));
+    
+    if (testData.length === 0) continue;
+    
+    // Make predictions
+    const predictions = modelFn(trainingData, targetCol, testData.length);
+    
+    // Extract actual and predicted values
+    const actual = testData.map(item => item[targetCol]);
+    const predicted = predictions.map(item => item[targetCol]);
+    
+    if (actual.length !== predicted.length) continue;
+    
+    // Calculate metrics
+    results.push({
+      mae: calculateMAE(actual, predicted),
+      rmse: calculateRMSE(actual, predicted),
+      mape: calculateMAPE(actual, predicted),
+      r2: calculateR2(actual, predicted),
+      directionalAccuracy: calculateDirectionalAccuracy(actual, predicted)
+    });
+  }
+  
+  // Average the results
+  if (results.length === 0) {
+    return {
+      mae: 0,
+      rmse: 0,
+      mape: 0,
+      r2: 0,
+      directionalAccuracy: 0
+    };
+  }
+  
+  return {
+    mae: results.reduce((sum, r) => sum + r.mae, 0) / results.length,
+    rmse: results.reduce((sum, r) => sum + r.rmse, 0) / results.length,
+    mape: results.reduce((sum, r) => sum + r.mape, 0) / results.length,
+    r2: results.reduce((sum, r) => sum + r.r2, 0) / results.length,
+    directionalAccuracy: results.reduce((sum, r) => sum + r.directionalAccuracy, 0) / results.length
+  };
+};
+
+// Calculate an overall model score based on evaluation metrics
+export const calculateModelScore = (evaluation: {
+  mae: number;
+  rmse: number;
+  mape: number;
+  r2: number;
+  directionalAccuracy: number;
+}): number => {
+  // Convert each metric to a 0-100 scale where higher is better
+  
+  // For MAPE: Lower is better, but we want higher score for better performance
+  // A MAPE of 0% is perfect, while 100% or higher is poor
+  const mapeScore = Math.max(0, 100 - evaluation.mape);
+  
+  // For R²: Higher is better (0-1 scale)
+  const r2Score = evaluation.r2 * 100;
+  
+  // For directional accuracy: Higher is better (0-100 scale)
+  const dirAccScore = evaluation.directionalAccuracy;
+  
+  // Combine scores with weights
+  // We prioritize directional accuracy and MAPE for financial time series
+  const weightedScore = (
+    mapeScore * 0.35 +
+    r2Score * 0.25 +
+    dirAccScore * 0.4
+  );
+  
+  // Return rounded score
+  return Math.round(weightedScore);
+};
