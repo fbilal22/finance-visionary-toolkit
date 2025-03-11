@@ -1,6 +1,5 @@
-
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { ProcessedDataset, generateSampleData } from '@/utils/dataProcessing';
+import { ProcessedDataset, generateSampleData, processCSVData } from '@/utils/dataProcessing';
 import { toast } from '@/components/ui/use-toast';
 
 interface ModelPrediction {
@@ -40,11 +39,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       
       // Process based on file type
       if (file.type === 'application/json' || file.name.endsWith('.json')) {
-        // For now, let's handle JSON files similarly to CSV files
-        // We'll need to implement a proper JSON parser in dataProcessing.ts later
-        const { processCSVData } = await import('@/utils/dataProcessing');
-        
-        // Process the JSON as if it were CSV for now
+        // Handle JSON data
+        // For now, treat it like CSV (we should implement better JSON handling later)
+        // This is a simplified approach
         const processedData = processCSVData(text, file.name);
         
         if (processedData.data.length === 0) {
@@ -67,10 +64,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           description: `${processedData.meta.rowCount || 0} rows and ${processedData.meta.columnNames.length || 0} columns imported.`,
         });
       } else {
-        // Import the processing function dynamically to reduce initial load time
-        const { processCSVData } = await import('@/utils/dataProcessing');
-        
-        // Process the CSV data
+        // Process CSV data
         const processedData = processCSVData(text, file.name);
         
         if (processedData.data.length === 0) {

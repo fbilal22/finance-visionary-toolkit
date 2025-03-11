@@ -28,9 +28,7 @@ export interface ProcessedDataset {
   fileName: string;
 }
 
-// Parse CSV data with proper handling of quoted values
 export const parseCSV = (csvText: string): string[][] => {
-  // Split by lines, accounting for both \r\n and \n line endings
   const lines = csvText.split(/\r?\n/);
   const result: string[][] = [];
   
@@ -45,21 +43,17 @@ export const parseCSV = (csvText: string): string[][] => {
       const char = line[i];
       
       if (char === '"' && (i === 0 || line[i-1] !== '\\')) {
-        // Toggle quote state, but don't add the quote character
         inQuotes = !inQuotes;
       } else if (char === ',' && !inQuotes) {
-        // End of cell - only if not inside quotes
         row.push(currentValue.trim());
         currentValue = '';
       } else {
-        // Add character to current value, excluding quote characters
         if (!(char === '"' && (i === 0 || i === line.length - 1 || line[i+1] === ','))) {
           currentValue += char;
         }
       }
     }
     
-    // Add the last cell
     if (currentValue || row.length > 0) {
       row.push(currentValue.trim());
     }
@@ -73,7 +67,6 @@ export const parseCSV = (csvText: string): string[][] => {
   return result;
 };
 
-// Determine column types
 export const determineColumnTypes = (
   data: string[][],
   headers: string[]
@@ -81,7 +74,6 @@ export const determineColumnTypes = (
   const types: Record<string, 'numeric' | 'categorical' | 'date' | 'unknown'> = {};
   
   headers.forEach((header, index) => {
-    // Check first few non-header rows to determine type
     const sampleValues = data.slice(1, Math.min(11, data.length))
       .map(row => row[index])
       .filter(val => val !== undefined && val !== '');
@@ -91,12 +83,14 @@ export const determineColumnTypes = (
       return;
     }
     
-    // Enhanced date pattern detection
     const datePatterns = [
-      /^\d{1,2}\/\d{1,2}\/\d{4}$/,  // MM/DD/YYYY or DD/MM/YYYY
-      /^\d{4}-\d{1,2}-\d{1,2}$/,    // YYYY-MM-DD
-      /^\d{1,2}-\d{1,2}-\d{4}$/,    // DD-MM-YYYY or MM-DD-YYYY
-      /^\d{1,2}\.\d{1,2}\.\d{4}$/   // DD.MM.YYYY or MM.DD.YYYY
+      /^\d{1,2}\/\d{1,2}\/\d{4}$/,
+      /^\d{4}-\d{1,2}-\d{1,2}$/,
+      /^\d{1,2}-\d{1,2}-\d{4}$/,
+      /^\d{1,2}\.\d{1,2}\.\d{4}$/,
+      /^\d{4}\/\d{1,2}\/\d{1,2}$/,
+      /^\d{1,2}\s+[a-zA-Z]{3,}\s+\d{4}$/,
+      /^[a-zA-Z]{3,}\s+\d{1,2},?\s+\d{4}$/
     ];
     
     const potentialDateColumn = header.toLowerCase().includes('date') || 
@@ -113,21 +107,17 @@ export const determineColumnTypes = (
       return;
     }
     
-    // Check if it's a numeric column (may include % or currency symbols or suffixes like M, K)
     const isNumeric = sampleValues.every(val => {
-      // Check for percentage values like "0.72%"
       if (val.endsWith('%')) {
         const numPart = val.replace('%', '');
         return !isNaN(parseFloat(numPart));
       }
       
-      // Check for volume values with suffixes like "11.43M"
       if (/^[\d,.]+[KMB]$/i.test(val)) {
         return true;
       }
       
-      // Check for regular numeric values
-      const cleanVal = val.replace(/[^\d.-]/g, ''); // Remove currency symbols, commas, etc.
+      const cleanVal = val.replace(/[^\d.-]/g, '');
       return !isNaN(parseFloat(cleanVal));
     });
     
@@ -137,7 +127,6 @@ export const determineColumnTypes = (
       return;
     }
     
-    // If small number of unique values relative to sample size, likely categorical
     const uniqueValues = new Set(sampleValues);
     if (uniqueValues.size <= Math.max(5, sampleValues.length * 0.3)) {
       types[header] = 'categorical';
@@ -152,14 +141,11 @@ export const determineColumnTypes = (
   return types;
 };
 
-// Normalize volume values like "11.43M" to actual numbers
 const normalizeVolume = (volume: string): number => {
   if (!volume) return 0;
   
-  // Remove commas from numbers like "123,456"
   volume = volume.replace(/,/g, '');
   
-  // Handle suffixes like M (million), K (thousand), B (billion)
   const suffixMatch = volume.match(/^([\d.]+)([KMB])$/i);
   if (suffixMatch) {
     const number = parseFloat(suffixMatch[1]);
@@ -173,30 +159,67 @@ const normalizeVolume = (volume: string): number => {
   return parseFloat(volume);
 };
 
-// Clean percentage values by removing % sign and converting to decimal
 const cleanPercentage = (value: string): number => {
   if (!value) return 0;
   return parseFloat(value.replace('%', '')) / 100;
 };
 
-// Parse date in DD/MM/YYYY format to YYYY-MM-DD
 const parseDate = (dateStr: string): string => {
   if (!dateStr) return '';
   
-  // Handle DD/MM/YYYY format
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-    const parts = dateStr.split('/');
-    if (parts.length === 3) {
-      const [day, month, year] = parts;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  try {
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const [day, month, year] = parts;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
     }
+    
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3 && parseInt(parts[0]) <= 12) {
+        const [month, day, year] = parts;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+    }
+    
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateStr)) {
+      return dateStr;
+    }
+    
+    if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateStr)) {
+      return dateStr.replace(/\//g, '-');
+    }
+    
+    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const [day, month, year] = parts;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+    }
+    
+    if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(dateStr)) {
+      const parts = dateStr.split('.');
+      if (parts.length === 3) {
+        const [day, month, year] = parts;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+    }
+    
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+    
+    return dateStr;
+  } catch (error) {
+    console.error("Error parsing date:", dateStr, error);
+    return dateStr;
   }
-  
-  // If already in YYYY-MM-DD format or other format, return as is
-  return dateStr;
 };
 
-// Convert raw CSV data to structured dataset
 export const processCSVData = (csvText: string, fileName: string): ProcessedDataset => {
   const parsedData = parseCSV(csvText);
   if (parsedData.length < 2) {
@@ -211,7 +234,6 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   
   const columnTypes = determineColumnTypes(parsedData, headers);
   
-  // Find the date column
   let dateColumnIndex = headers.findIndex(
     header => columnTypes[header] === 'date' || 
               header.toLowerCase().includes('date')
@@ -219,7 +241,6 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   
   console.log('Date column index:', dateColumnIndex, 'Column name:', headers[dateColumnIndex]);
   
-  // Map column names to standard financial data fields
   const columnMapping: Record<string, string> = {};
   headers.forEach(header => {
     const lowerHeader = header.toLowerCase();
@@ -239,33 +260,28 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     } else if (lowerHeader.includes('change') || lowerHeader.includes('%')) {
       columnMapping[header] = 'change';
     } else {
-      // Keep original name for other columns
       columnMapping[header] = header;
     }
   });
   
   console.log("Column mapping:", columnMapping);
   
-  // Convert to proper data types
   const structuredData: FinancialDataPoint[] = dataRows.map(row => {
     const dataPoint: FinancialDataPoint = { date: '' };
     
-    // Process each column
     headers.forEach((header, index) => {
       const value = row[index];
-      if (value === undefined || value === '') return; // Skip undefined or empty values
+      if (value === undefined || value === '') return;
       
       const mappedField = columnMapping[header];
       
       if (mappedField === 'date' && value) {
-        // Parse the date using our helper function
         dataPoint.date = parseDate(value);
       } else if (mappedField === 'volume' && value) {
         dataPoint[mappedField] = normalizeVolume(value);
       } else if (mappedField === 'change' && value) {
         dataPoint[mappedField] = cleanPercentage(value);
       } else if (columnTypes[header] === 'numeric' && value) {
-        // Handle numeric values, removing any non-numeric characters except decimal point
         const cleanValue = value.replace(/[^\d.-]/g, '');
         const numValue = parseFloat(cleanValue);
         if (!isNaN(numValue)) {
@@ -279,13 +295,10 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     return dataPoint;
   });
 
-  // Filter out any rows with invalid date
   const validData = structuredData.filter(item => item.date && item.date !== '');
-
-  // Get the list of column names from the column mapping
+  
   const derivedColumnNames = Object.values(columnMapping);
   
-  // Analyze dataset for metadata
   const missingValues: Record<string, number> = {};
   const summary: Record<string, {
     min?: number;
@@ -295,12 +308,10 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     stdDev?: number;
   }> = {};
   
-  // Initialize missing values counters for all columns
   derivedColumnNames.forEach(mappedCol => {
     missingValues[mappedCol] = 0;
   });
   
-  // Count missing values
   validData.forEach(row => {
     derivedColumnNames.forEach(column => {
       if (row[column] === undefined || row[column] === '') {
@@ -309,9 +320,7 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
     });
   });
   
-  // Generate summary statistics for numeric columns
   derivedColumnNames.forEach(column => {
-    // Find the original column for type checking
     const originalCol = Object.keys(columnMapping).find(key => columnMapping[key] === column);
     
     if (originalCol && columnTypes[originalCol] === 'numeric') {
@@ -327,7 +336,6 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
           ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
           : sorted[Math.floor(sorted.length / 2)];
         
-        // Calculate standard deviation
         const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
         const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / values.length;
         const stdDev = Math.sqrt(variance);
@@ -362,12 +370,10 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
   };
 };
 
-// Generate sample data for testing
 export const generateSampleData = (): ProcessedDataset => {
   const today = new Date();
   const data: FinancialDataPoint[] = [];
   
-  // Generate 100 days of sample stock data
   for (let i = 0; i < 100; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
