@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '@/context/DataContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,23 +19,23 @@ const Visualization = () => {
   const [additionalSeries, setAdditionalSeries] = useState<string[]>([]);
 
   // Redirect if no data
-  useMemo(() => {
+  useEffect(() => {
     if (!isLoading && !dataset) {
       navigate('/');
     }
   }, [dataset, isLoading, navigate]);
 
   // Initialize default axes when dataset loads
-  useMemo(() => {
+  useEffect(() => {
     if (dataset) {
       const { columnNames, columnTypes } = dataset.meta;
       
       // Set date column as default X-axis if available
-      const dateColumn = columnNames.find(col => columnTypes[col] === 'date');
+      const dateColumn = columnNames.find(col => col === 'date' || columnTypes[col] === 'date');
       if (dateColumn) setXAxis(dateColumn);
       
       // Set first numeric column as default Y-axis
-      const numericColumns = columnNames.filter(col => columnTypes[col] === 'numeric');
+      const numericColumns = columnNames.filter(col => col !== 'date' && columnTypes[col] === 'numeric');
       if (numericColumns.length > 0) {
         setYAxis(numericColumns[0]);
         
@@ -72,7 +71,7 @@ const Visualization = () => {
   const { columnNames, columnTypes } = meta;
   
   // Filter numeric columns for Y-axis
-  const numericColumns = columnNames.filter(col => columnTypes[col] === 'numeric');
+  const numericColumns = columnNames.filter(col => col !== 'date' && columnTypes[col] === 'numeric');
   
   // Check if we have OHLC data for candlestick
   const hasOHLCData = numericColumns.includes('open') && 
@@ -81,13 +80,25 @@ const Visualization = () => {
                        numericColumns.includes('close');
 
   // Generate chart data (limit to 100 points for performance)
-  const chartData = data.slice(-100);
+  const chartData = data.slice(-100).map(item => {
+    // Create a new object to avoid modifying the original data
+    const formattedItem = { ...item };
+    
+    // Format date for display if it exists
+    if (formattedItem.date) {
+      // Keep the ISO format for the chart
+      formattedItem.displayDate = formattedItem.date;
+    }
+    
+    return formattedItem;
+  });
   
   // Generate a palette of colors based on finance theme
   const colors = ['#1E88E5', '#4CAF50', '#E53935', '#FFB300', '#8E24AA', '#607D8B'];
 
   // Create a formatter for the tooltip values
   const formatValue = (value: number) => {
+    if (typeof value !== 'number') return value;
     return value.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
@@ -115,11 +126,32 @@ const Visualization = () => {
                 textAnchor="end" 
                 height={60} 
                 tick={{ fontSize: 12 }} 
+                tickFormatter={(value) => {
+                  // If the value is a date string in ISO format, format it
+                  if (xAxis === 'date' && typeof value === 'string') {
+                    // Format as DD/MM/YYYY for display
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return value;
+                }}
               />
               <YAxis />
               <Tooltip 
                 contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
-                formatter={(value: number) => [formatValue(value), yAxis]}
+                formatter={(value: any, name: string) => [formatValue(value), name]}
+                labelFormatter={(label) => {
+                  // Format date label in tooltip if it's a date
+                  if (xAxis === 'date' && typeof label === 'string') {
+                    const date = new Date(label);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return label;
+                }}
               />
               <Legend />
               <Line 
@@ -158,11 +190,31 @@ const Visualization = () => {
                 textAnchor="end" 
                 height={60} 
                 tick={{ fontSize: 12 }} 
+                tickFormatter={(value) => {
+                  // If the value is a date string in ISO format, format it
+                  if (xAxis === 'date' && typeof value === 'string') {
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return value;
+                }}
               />
               <YAxis />
               <Tooltip 
                 contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
-                formatter={(value: number) => [formatValue(value), yAxis]}
+                formatter={(value: any, name: string) => [formatValue(value), name]}
+                labelFormatter={(label) => {
+                  // Format date label in tooltip if it's a date
+                  if (xAxis === 'date' && typeof label === 'string') {
+                    const date = new Date(label);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return label;
+                }}
               />
               <Legend />
               <Bar dataKey={yAxis} fill={colors[0]} />
@@ -198,6 +250,16 @@ const Visualization = () => {
                 textAnchor="end" 
                 height={60} 
                 tick={{ fontSize: 12 }} 
+                tickFormatter={(value) => {
+                  // If the value is a date string in ISO format, format it
+                  if (xAxis === 'date' && typeof value === 'string') {
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return value;
+                }}
               />
               <YAxis />
               <Tooltip 
@@ -238,6 +300,16 @@ const Visualization = () => {
                 dataKey={xAxis} 
                 name={xAxis} 
                 tick={{ fontSize: 12 }} 
+                tickFormatter={(value) => {
+                  // If the value is a date string in ISO format, format it
+                  if (xAxis === 'date' && typeof value === 'string') {
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return value;
+                }}
               />
               <YAxis type="number" dataKey={yAxis} name={yAxis} />
               <Tooltip 
@@ -276,6 +348,16 @@ const Visualization = () => {
                 textAnchor="end" 
                 height={60} 
                 tick={{ fontSize: 12 }} 
+                tickFormatter={(value) => {
+                  // If the value is a date string in ISO format, format it
+                  if (xAxis === 'date' && typeof value === 'string') {
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  }
+                  return value;
+                }}
               />
               <YAxis domain={['auto', 'auto']} />
               <Tooltip 
@@ -430,7 +512,7 @@ const Visualization = () => {
                 <Select 
                   value={additionalSeries[0] || ''}
                   onValueChange={(value) => {
-                    if (value) {
+                    if (value && value !== 'none') {
                       setAdditionalSeries([value, additionalSeries[1] || '']);
                     } else {
                       // Use 'none' as placeholder value
