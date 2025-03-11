@@ -156,12 +156,27 @@ const normalizeVolume = (volume: string): number => {
     if (suffix === 'B') return number * 1000000000;
   }
   
-  return parseFloat(volume);
+  const numericValue = parseFloat(volume);
+  if (!isNaN(numericValue)) {
+    return numericValue;
+  }
+  
+  return 0;
 };
 
 const cleanPercentage = (value: string): number => {
   if (!value) return 0;
-  return parseFloat(value.replace('%', '')) / 100;
+  
+  if (value.includes('%')) {
+    return parseFloat(value.replace('%', '')) / 100;
+  }
+  
+  const numericValue = parseFloat(value);
+  if (!isNaN(numericValue)) {
+    return numericValue;
+  }
+  
+  return 0;
 };
 
 const parseDate = (dateStr: string): string => {
@@ -282,8 +297,16 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
       } else if (mappedField === 'change' && value) {
         dataPoint[mappedField] = cleanPercentage(value);
       } else if (columnTypes[header] === 'numeric' && value) {
-        const cleanValue = value.replace(/[^\d.-]/g, '');
-        const numValue = parseFloat(cleanValue);
+        let numValue: number;
+        if (value.includes('%')) {
+          numValue = cleanPercentage(value);
+        } else if (value.match(/[KMB]$/i)) {
+          numValue = normalizeVolume(value);
+        } else {
+          const cleanValue = value.replace(/[^\d.-]/g, '');
+          numValue = parseFloat(cleanValue);
+        }
+        
         if (!isNaN(numValue)) {
           dataPoint[mappedField] = numValue;
         }

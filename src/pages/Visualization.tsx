@@ -18,28 +18,23 @@ const Visualization = () => {
   const [yAxis, setYAxis] = useState('');
   const [additionalSeries, setAdditionalSeries] = useState<string[]>([]);
 
-  // Redirect if no data
   useEffect(() => {
     if (!isLoading && !dataset) {
       navigate('/');
     }
   }, [dataset, isLoading, navigate]);
 
-  // Initialize default axes when dataset loads
   useEffect(() => {
     if (dataset) {
       const { columnNames, columnTypes } = dataset.meta;
       
-      // Set date column as default X-axis if available
       const dateColumn = columnNames.find(col => col === 'date' || columnTypes[col] === 'date');
       if (dateColumn) setXAxis(dateColumn);
       
-      // Set first numeric column as default Y-axis
       const numericColumns = columnNames.filter(col => col !== 'date' && columnTypes[col] === 'numeric');
       if (numericColumns.length > 0) {
         setYAxis(numericColumns[0]);
         
-        // Set second and third numeric columns as additional series if available
         if (numericColumns.length > 1) {
           setAdditionalSeries([numericColumns[1]]);
           if (numericColumns.length > 2) {
@@ -70,33 +65,39 @@ const Visualization = () => {
   const { data, meta } = dataset;
   const { columnNames, columnTypes } = meta;
   
-  // Filter numeric columns for Y-axis
   const numericColumns = columnNames.filter(col => col !== 'date' && columnTypes[col] === 'numeric');
   
-  // Check if we have OHLC data for candlestick
   const hasOHLCData = numericColumns.includes('open') && 
                        numericColumns.includes('high') && 
                        numericColumns.includes('low') && 
                        numericColumns.includes('close');
 
-  // Generate chart data (limit to 100 points for performance)
   const chartData = data.slice(-100).map(item => {
-    // Create a new object to avoid modifying the original data
     const formattedItem = { ...item };
     
-    // Format date for display if it exists
     if (formattedItem.date) {
-      // Keep the ISO format for the chart
-      formattedItem.displayDate = formattedItem.date;
+      const date = new Date(formattedItem.date);
+      if (!isNaN(date.getTime())) {
+        formattedItem.displayDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+      } else {
+        formattedItem.displayDate = formattedItem.date;
+      }
     }
+    
+    Object.keys(formattedItem).forEach(key => {
+      if (typeof formattedItem[key] === 'number') {
+        formattedItem[`${key}Formatted`] = formattedItem[key].toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      }
+    });
     
     return formattedItem;
   });
   
-  // Generate a palette of colors based on finance theme
   const colors = ['#1E88E5', '#4CAF50', '#E53935', '#FFB300', '#8E24AA', '#607D8B'];
 
-  // Create a formatter for the tooltip values
   const formatValue = (value: number) => {
     if (typeof value !== 'number') return value;
     return value.toLocaleString(undefined, {
@@ -127,9 +128,7 @@ const Visualization = () => {
                 height={60} 
                 tick={{ fontSize: 12 }} 
                 tickFormatter={(value) => {
-                  // If the value is a date string in ISO format, format it
                   if (xAxis === 'date' && typeof value === 'string') {
-                    // Format as DD/MM/YYYY for display
                     const date = new Date(value);
                     if (!isNaN(date.getTime())) {
                       return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
@@ -138,12 +137,13 @@ const Visualization = () => {
                   return value;
                 }}
               />
-              <YAxis />
+              <YAxis 
+                tickFormatter={(value) => formatValue(value)}
+              />
               <Tooltip 
                 contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
                 formatter={(value: any, name: string) => [formatValue(value), name]}
                 labelFormatter={(label) => {
-                  // Format date label in tooltip if it's a date
                   if (xAxis === 'date' && typeof label === 'string') {
                     const date = new Date(label);
                     if (!isNaN(date.getTime())) {
@@ -191,7 +191,6 @@ const Visualization = () => {
                 height={60} 
                 tick={{ fontSize: 12 }} 
                 tickFormatter={(value) => {
-                  // If the value is a date string in ISO format, format it
                   if (xAxis === 'date' && typeof value === 'string') {
                     const date = new Date(value);
                     if (!isNaN(date.getTime())) {
@@ -206,7 +205,6 @@ const Visualization = () => {
                 contentStyle={{ backgroundColor: 'rgba(26, 33, 48, 0.9)', borderColor: 'rgba(255,255,255,0.1)' }}
                 formatter={(value: any, name: string) => [formatValue(value), name]}
                 labelFormatter={(label) => {
-                  // Format date label in tooltip if it's a date
                   if (xAxis === 'date' && typeof label === 'string') {
                     const date = new Date(label);
                     if (!isNaN(date.getTime())) {
@@ -251,7 +249,6 @@ const Visualization = () => {
                 height={60} 
                 tick={{ fontSize: 12 }} 
                 tickFormatter={(value) => {
-                  // If the value is a date string in ISO format, format it
                   if (xAxis === 'date' && typeof value === 'string') {
                     const date = new Date(value);
                     if (!isNaN(date.getTime())) {
@@ -301,7 +298,6 @@ const Visualization = () => {
                 name={xAxis} 
                 tick={{ fontSize: 12 }} 
                 tickFormatter={(value) => {
-                  // If the value is a date string in ISO format, format it
                   if (xAxis === 'date' && typeof value === 'string') {
                     const date = new Date(value);
                     if (!isNaN(date.getTime())) {
@@ -349,7 +345,6 @@ const Visualization = () => {
                 height={60} 
                 tick={{ fontSize: 12 }} 
                 tickFormatter={(value) => {
-                  // If the value is a date string in ISO format, format it
                   if (xAxis === 'date' && typeof value === 'string') {
                     const date = new Date(value);
                     if (!isNaN(date.getTime())) {
@@ -365,7 +360,6 @@ const Visualization = () => {
                 formatter={(value: number) => [formatValue(value), '']}
               />
               <Legend />
-              {/* High-Low line */}
               {chartData.map((entry, index) => (
                 <Line
                   key={`hl-${index}`}
@@ -393,7 +387,6 @@ const Visualization = () => {
                   })}
                 </Line>
               ))}
-              {/* Candle bodies */}
               {chartData.map((entry, index) => {
                 const fill = entry.close >= entry.open ? colors[1] : colors[2];
                 return (
@@ -515,7 +508,6 @@ const Visualization = () => {
                     if (value && value !== 'none') {
                       setAdditionalSeries([value, additionalSeries[1] || '']);
                     } else {
-                      // Use 'none' as placeholder value
                       setAdditionalSeries([]);
                     }
                   }}
