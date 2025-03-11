@@ -1,4 +1,3 @@
-
 export interface FinancialDataPoint {
   date: string;
   open?: number;
@@ -180,6 +179,23 @@ const cleanPercentage = (value: string): number => {
   return parseFloat(value.replace('%', '')) / 100;
 };
 
+// Parse date in DD/MM/YYYY format to YYYY-MM-DD
+const parseDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  // Handle DD/MM/YYYY format
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+  }
+  
+  // If already in YYYY-MM-DD format or other format, return as is
+  return dateStr;
+};
+
 // Convert raw CSV data to structured dataset
 export const processCSVData = (csvText: string, fileName: string): ProcessedDataset => {
   const parsedData = parseCSV(csvText);
@@ -242,18 +258,8 @@ export const processCSVData = (csvText: string, fileName: string): ProcessedData
       const mappedField = columnMapping[header];
       
       if (mappedField === 'date' && value) {
-        // Convert MM/DD/YYYY to YYYY-MM-DD format
-        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
-          const parts = value.split('/');
-          if (parts.length === 3) {
-            const [month, day, year] = parts;
-            dataPoint.date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-          } else {
-            dataPoint.date = value;
-          }
-        } else {
-          dataPoint.date = value;
-        }
+        // Parse the date using our helper function
+        dataPoint.date = parseDate(value);
       } else if (mappedField === 'volume' && value) {
         dataPoint[mappedField] = normalizeVolume(value);
       } else if (mappedField === 'change' && value) {

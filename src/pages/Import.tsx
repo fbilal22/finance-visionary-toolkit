@@ -55,7 +55,7 @@ const Import = () => {
 
   return (
     <div className="container py-8">
-      <h1 className="text-2xl font-bold mb-8">Importation de fichiers</h1>
+      <h1 className="text-2xl font-bold mb-8">Import Files</h1>
       
       <Card className="border border-dashed">
         <CardContent className="p-0">
@@ -74,11 +74,11 @@ const Import = () => {
             />
             
             <h3 className="text-lg font-medium mb-2">
-              Cliquez pour importer un fichier CSV, JSON, Excel
+              Click to import a CSV, JSON, or Excel file
             </h3>
             
             <p className="text-sm text-muted-foreground mb-6">
-              Formats supportés: .csv, .json
+              Supported formats: .csv, .json
             </p>
             
             <div className="flex flex-wrap gap-3 justify-center">
@@ -86,7 +86,7 @@ const Import = () => {
                 onClick={() => document.getElementById('file-upload')?.click()}
                 disabled={isLoading}
               >
-                Sélectionner un fichier
+                Select a file
               </Button>
               
               <Button
@@ -94,7 +94,7 @@ const Import = () => {
                 onClick={handleSampleData}
                 disabled={isLoading}
               >
-                Charger des données d'exemple
+                Load sample data
               </Button>
             </div>
             
